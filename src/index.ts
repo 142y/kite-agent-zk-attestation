@@ -4,5 +4,5 @@ export * from './state-tree.js';
 export * from './pipeline.js';
 export * from './optimizer.js';
 export * from './pruner.js';
-
+export * from './utils/retry-backoff.js';
 
