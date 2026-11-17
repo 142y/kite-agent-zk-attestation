@@ -9,6 +9,17 @@ export async function executeWithJitterRetry<T>(
   options: RetryOptions = {}
 ): Promise<T> {
   const { maxRetries = 3, baseDelayMs = 200, maxDelayMs = 3000 } = options;
+
+  if (!Number.isSafeInteger(maxRetries) || maxRetries < 0) {
+    throw new RangeError('maxRetries must be a non-negative safe integer');
+  }
+  if (!Number.isFinite(baseDelayMs) || baseDelayMs < 0) {
+    throw new RangeError('baseDelayMs must be a non-negative finite number');
+  }
+  if (!Number.isFinite(maxDelayMs) || maxDelayMs < 0) {
+    throw new RangeError('maxDelayMs must be a non-negative finite number');
+  }
+
   let attempt = 0;
 
   while (true) {
