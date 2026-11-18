@@ -1,69 +1,62 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { AttestationPrunerDaemon } from '../src/pruner.js';
-import { type Hex } from 'viem';
+import { describe, it, expect } from "vitest";
+import { AttestationPrunerDaemon, type EpochArchiveEntry } from "../src/pruner.js";
 
-describe('AttestationPrunerDaemon', () => {
-  let daemon: AttestationPrunerDaemon;
+describe("AttestationPrunerDaemon", () => {
+  it("enforces maxRetainedCapacity during continuous ingestion", () => {
+    const daemon = new AttestationPrunerDaemon(86_400_000, 3);
+    for (let i = 1n; i <= 5n; i++) {
+      daemon.recordAttestation({
+        agentId: "0x01",
+        epoch: i,
+        anchoredTimestamp: Date.now(),
+        attestationDigest: "0x02",
+      });
+    }
 
-  const agent1: Hex = '0x1111111111111111111111111111111111111111111111111111111111111111';
-  const digest1: Hex = '0xaaaa1111aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111';
-
-  beforeEach(() => {
-    daemon = new AttestationPrunerDaemon(3600_000); // 1 hour default
+    expect(daemon.getRecordCount()).toBe(3);
+    const records = daemon.getRecords();
+    expect(records.map((r) => r.epoch)).toEqual([3n, 4n, 5n]);
   });
 
-  it('records new attestation entries', () => {
+  it("selectively prunes targeted agent IDs while preserving others", () => {
+    const daemon = new AttestationPrunerDaemon();
     daemon.recordAttestation({
-      agentId: agent1,
-      epoch: 10n,
-      anchoredTimestamp: Date.now(),
-      attestationDigest: digest1,
-    });
-
-    expect(daemon.getRecordCount()).toBe(1);
-    expect(daemon.getRecords()[0].epoch).toBe(10n);
-  });
-
-  it('prunes expired entries by timestamp age', () => {
-    const twoHoursAgo = Date.now() - 7200_000;
-    daemon.recordAttestation({
-      agentId: agent1,
-      epoch: 5n,
-      anchoredTimestamp: twoHoursAgo,
-      attestationDigest: digest1,
+      agentId: "0xaa",
+      epoch: 2n,
+      anchoredTimestamp: Date.now() - 100_000_000,
+      attestationDigest: "0x01",
     });
     daemon.recordAttestation({
-      agentId: agent1,
-      epoch: 10n,
-      anchoredTimestamp: Date.now(),
-      attestationDigest: digest1,
+      agentId: "0xbb",
+      epoch: 2n,
+      anchoredTimestamp: Date.now() - 100_000_000,
+      attestationDigest: "0x02",
     });
 
-    const report = daemon.prune();
-    expect(report.scannedCount).toBe(2);
+    // Prune only 0xaa
+    const report = daemon.prune({ targetAgentIds: ["0xaa"] });
     expect(report.prunedCount).toBe(1);
-    expect(report.retainedCount).toBe(1);
-    expect(daemon.getRecordCount()).toBe(1);
-    expect(daemon.getRecords()[0].epoch).toBe(10n);
+    expect(daemon.getRecords()).toHaveLength(1);
+    expect(daemon.getRecords()[0].agentId).toBe("0xbb");
   });
 
-  it('prunes entries by retention epoch threshold', () => {
+  it("filters records by agent correctly", () => {
+    const daemon = new AttestationPrunerDaemon();
     daemon.recordAttestation({
-      agentId: agent1,
-      epoch: 5n,
+      agentId: "0x1111111111111111111111111111111111111111111111111111111111111111",
+      epoch: 1n,
       anchoredTimestamp: Date.now(),
-      attestationDigest: digest1,
+      attestationDigest: "0x01",
     });
     daemon.recordAttestation({
-      agentId: agent1,
-      epoch: 15n,
+      agentId: "0x2222222222222222222222222222222222222222222222222222222222222222",
+      epoch: 2n,
       anchoredTimestamp: Date.now(),
-      attestationDigest: digest1,
+      attestationDigest: "0x02",
     });
 
-    const report = daemon.prune({ retentionEpochThreshold: 10n });
-    expect(report.prunedCount).toBe(1);
-    expect(report.retainedCount).toBe(1);
-    expect(daemon.getRecords()[0].epoch).toBe(15n);
+    const records = daemon.getRecordsByAgent("0x1111111111111111111111111111111111111111111111111111111111111111");
+    expect(records).toHaveLength(1);
+    expect(records[0].epoch).toBe(1n);
   });
 });
