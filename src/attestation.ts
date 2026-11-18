@@ -27,7 +27,7 @@ export class KiteZKAttestationRelay {
     config: KiteNetworkConfig = KITE_TESTNET_CONFIG,
     private readonly verifyProof?: AttestationProofVerifier
   ) {
-    this.config = config;
+    this.config = { ...config };
   }
 
   /**
@@ -127,6 +127,6 @@ export class KiteZKAttestationRelay {
   }
 
   public getNetworkConfig(): KiteNetworkConfig {
-    return this.config;
+    return { ...this.config };
   }
 }
