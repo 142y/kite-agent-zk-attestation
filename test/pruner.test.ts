@@ -27,6 +27,32 @@ describe('AttestationPrunerDaemon', () => {
     expect(records.map((r) => r.epoch)).toEqual([3n, 4n, 5n]);
   });
 
+  it('evicts by anchor age rather than comparing unrelated agent epochs', () => {
+    const limited = new AttestationPrunerDaemon(86_400_000, 2);
+
+    limited.recordAttestation({
+      agentId: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      epoch: 10_000n,
+      anchoredTimestamp: 1_000,
+      attestationDigest: '0x01',
+    });
+    limited.recordAttestation({
+      agentId: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      epoch: 10_001n,
+      anchoredTimestamp: 2_000,
+      attestationDigest: '0x02',
+    });
+    limited.recordAttestation({
+      agentId: '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      epoch: 1n,
+      anchoredTimestamp: 3_000,
+      attestationDigest: '0x03',
+    });
+
+    expect(limited.getRecords().map((record) => record.attestationDigest))
+      .toEqual(['0x02', '0x03']);
+  });
+
   it('selectively prunes targeted agent IDs while preserving others', () => {
     const filtered = new AttestationPrunerDaemon();
     filtered.recordAttestation({
