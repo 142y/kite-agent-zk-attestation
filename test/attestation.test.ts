@@ -84,6 +84,23 @@ describe('KiteZKAttestationRelay', () => {
     expect((await older).valid).toBe(false);
   });
 
+  it('copies constructor network config so caller edits cannot retarget the relay', () => {
+    const config = { ...KITE_TESTNET_CONFIG };
+    const checked = new KiteZKAttestationRelay(config, () => true);
+    config.chainId = 1;
+    config.rpcUrl = 'https://attacker.invalid';
+
+    expect(checked.getNetworkConfig()).toEqual(KITE_TESTNET_CONFIG);
+  });
+
+  it('returns network config snapshots that cannot mutate relay state', () => {
+    const snapshot = relay.getNetworkConfig();
+    snapshot.chainId = 1;
+    snapshot.contractAddress = '0x0000000000000000000000000000000000000000';
+
+    expect(relay.getNetworkConfig()).toEqual(KITE_TESTNET_CONFIG);
+  });
+
   it('rejects epochs outside the ABI uint256 bound without calling a verifier', async () => {
     const checked = new KiteZKAttestationRelay(KITE_TESTNET_CONFIG, () => { throw new Error('must not run'); });
     expect((await checked.verifyAttestationProof({ ...validProof, computationEpoch: 2n ** 256n })).valid).toBe(false);
