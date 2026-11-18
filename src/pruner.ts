@@ -33,6 +33,16 @@ export class AttestationPrunerDaemon {
   private maxRetainedCapacity?: number;
 
   constructor(defaultMaxAgeMs: number = 86_400_000, maxRetainedCapacity?: number) {
+    if (!Number.isFinite(defaultMaxAgeMs) || defaultMaxAgeMs < 0) {
+      throw new RangeError(`defaultMaxAgeMs must be a finite non-negative number, received ${defaultMaxAgeMs}`);
+    }
+    // A negative or NaN capacity would make the eviction loop in recordAttestation never terminate.
+    if (
+      maxRetainedCapacity !== undefined &&
+      (!Number.isInteger(maxRetainedCapacity) || maxRetainedCapacity < 1)
+    ) {
+      throw new RangeError(`maxRetainedCapacity must be a positive integer, received ${maxRetainedCapacity}`);
+    }
     this.defaultMaxAgeMs = defaultMaxAgeMs;
     this.maxRetainedCapacity = maxRetainedCapacity;
   }
