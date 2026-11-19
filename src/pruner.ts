@@ -41,6 +41,10 @@ export class AttestationPrunerDaemon {
   constructor(defaultMaxAgeMs: number = 86_400_000, maxRetainedCapacity?: number) {
     assertMaxAgeMs(defaultMaxAgeMs, 'defaultMaxAgeMs');
     this.defaultMaxAgeMs = defaultMaxAgeMs;
+    if (maxRetainedCapacity !== undefined
+      && (!Number.isSafeInteger(maxRetainedCapacity) || maxRetainedCapacity <= 0)) {
+      throw new RangeError('maxRetainedCapacity must be a positive safe integer');
+    }
     this.maxRetainedCapacity = maxRetainedCapacity;
   }
 
