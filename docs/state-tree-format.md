@@ -24,3 +24,14 @@ then apply the tagged internal hash. Compare the final hash to the trusted
 state root in the Kite attestation. Promoted nodes have no step. A
 single-action tree has an empty path. Invalid indices throw RangeError.
 Generate a fresh path after appending actions to match the new root.
+
+The reader can call the exported helper directly:
+
+```ts
+const included = verifyInclusionPath(actionDigest, siblingSteps, trustedStateRoot);
+```
+
+Obtain the root independently from the attestation being checked. The
+function checks membership of the action digest and returns false on a
+mismatch or malformed step. It does not establish an action index, tree
+size, or correctness of the attestation's ZK proof.
