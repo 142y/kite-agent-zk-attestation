@@ -54,7 +54,13 @@ export class BatchAttestationPipeline {
       summary.totalProcessed++;
 
       // Strict in-batch monotonicity check
-      if (request.strictEpochOrdering) {
+      // Malformed entries skip this check and are rejected by the relay's schema validation
+      // instead of crashing the whole batch.
+      if (
+        request.strictEpochOrdering &&
+        typeof proof?.agentId === "string" &&
+        typeof proof.computationEpoch === "bigint"
+      ) {
         const lastSeen = batchSeenEpochs.get(proof.agentId.toLowerCase());
         if (lastSeen !== undefined && proof.computationEpoch <= lastSeen) {
           summary.rejectedCount++;
