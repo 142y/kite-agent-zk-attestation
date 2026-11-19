@@ -67,6 +67,13 @@ describe('AttestationPrunerDaemon', () => {
     expect(records[0].epoch).toBe(1n);
   });
 
+  it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+    'rejects invalid retained capacity %s at construction',
+    (value) => {
+      expect(() => new AttestationPrunerDaemon(3600_000, value)).toThrow('positive safe integer');
+    }
+  );
+
   it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, -1])(
     'rejects invalid default max age %s at construction',
     (value) => {
