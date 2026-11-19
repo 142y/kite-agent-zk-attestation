@@ -52,3 +52,28 @@ describe('AgentStateTree', () => {
     }
   });
 });
+
+describe('action inclusion paths', () => {
+  const leaves = ['11', '22', '33', '44', '55'].map(x => ('0x' + x.repeat(32)) as Hex);
+  for (const size of [1, 2, 3, 4, 5]) {
+    it(`reconstructs the root for every index at size ${size}`, () => {
+      const tree = new AgentStateTree(leaves.slice(0, size));
+      for (let index = 0; index < size; index++) {
+        let hash = keccak256(concatHex(['0x00', leaves[index]]));
+        for (const step of tree.getInclusionPath(index)) {
+          const pair = step.position === 'left' ? [step.hash, hash] : [hash, step.hash];
+          hash = keccak256(concatHex(['0x01', ...pair]));
+        }
+        expect(hash).toBe(tree.getRoot());
+      }
+    });
+  }
+
+  it('rejects indices without an existing leaf', () => {
+    const tree = new AgentStateTree(leaves);
+    for (const index of [-1, 0.5, NaN, Infinity, leaves.length]) {
+      expect(() => tree.getInclusionPath(index)).toThrow(RangeError);
+    }
+    expect(() => new AgentStateTree().getInclusionPath(0)).toThrow(RangeError);
+  });
+});

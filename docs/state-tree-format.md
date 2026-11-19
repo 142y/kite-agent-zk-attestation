@@ -13,3 +13,14 @@ their original ordered action digests and version any stored root metadata.
 Do not compare a legacy root with a corrected root or claim old attestations
 were retroactively verified. This changes the state commitment only; it does
 not introduce a ZK circuit or verify on-chain attestations.
+
+## Disclosing a single action
+
+Call `tree.getInclusionPath(index)` with a zero-based index into the ordered
+action digests. Send the digest and returned sibling steps to the reader.
+Start with the tagged leaf hash described above. For each step, use its
+position to place the sibling on the indicated side of the running hash,
+then apply the tagged internal hash. Compare the final hash to the trusted
+state root in the Kite attestation. Promoted nodes have no step. A
+single-action tree has an empty path. Invalid indices throw RangeError.
+Generate a fresh path after appending actions to match the new root.

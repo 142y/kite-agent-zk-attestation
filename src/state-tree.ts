@@ -29,9 +29,31 @@ export class AgentStateTree {
     if (this.leaves.length === 0) {
       return ('0x' + '0'.repeat(64)) as Hex;
     }
+    return this.reduceTree();
+  }
+
+  /** Sibling hashes ordered from the leaf toward the root. */
+  public getInclusionPath(index: number): MerkleStep[] {
+    if (!Number.isSafeInteger(index) || index < 0 || index >= this.leaves.length) {
+      throw new RangeError('Leaf index outside the state tree');
+    }
+    const steps: MerkleStep[] = [];
+    this.reduceTree({ index, steps });
+    return steps;
+  }
+
+  private reduceTree(path?: { index: number; steps: MerkleStep[] }): Hex {
     let currentLevel = this.leaves.map((leaf) => keccak256(concatHex(['0x00', leaf])));
 
     while (currentLevel.length > 1) {
+      if (path) {
+        const isRight = path.index % 2 === 1;
+        const sibling = isRight ? path.index - 1 : path.index + 1;
+        if (sibling < currentLevel.length) {
+          path.steps.push({ hash: currentLevel[sibling], position: isRight ? 'left' : 'right' });
+        }
+        path.index = Math.floor(path.index / 2);
+      }
       const nextLevel: Hex[] = [];
       for (let i = 0; i < currentLevel.length; i += 2) {
         if (i + 1 < currentLevel.length) {
