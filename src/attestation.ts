@@ -4,6 +4,7 @@ import {
   type Hex,
   toHex,
   pad,
+  zeroHash,
 } from 'viem';
 import {
   AgentExecutionProof,
@@ -52,9 +53,11 @@ export class KiteZKAttestationRelay {
     if (!parseResult.success) {
       return {
         valid: false,
-        attestationDigest: '0x0' as Hex,
+        // Use 32-byte zero sentinels so rejected results remain valid bytes32 values
+        // for logging, ABI encoding and on-chain anchoring paths.
+        attestationDigest: zeroHash,
         epoch: 0n,
-        agentId: '0x0' as Hex,
+        agentId: zeroHash,
         rejectionReason: `Schema validation failed: ${parseResult.error.issues.map(i => i.message).join(', ')}`,
       };
     }
