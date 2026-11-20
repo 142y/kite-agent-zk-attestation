@@ -22,6 +22,7 @@ contract KiteAgentZKAttestation {
     // Kite Chain ChainID: 2368 (Testnet) / 2366 (Mainnet)
     uint256 public immutable chainId;
     address public owner;
+    address public pendingOwner;
     IKiteVerifier public verifier;
 
     struct AttestationRecord {
@@ -47,6 +48,8 @@ contract KiteAgentZKAttestation {
     );
 
     event VerifierUpdated(address indexed oldVerifier, address indexed newVerifier);
+    event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
     error InvalidProof();
     error StaleComputationEpoch(uint256 provided, uint256 current);
@@ -64,6 +67,24 @@ contract KiteAgentZKAttestation {
         owner = msg.sender;
         verifier = IKiteVerifier(_verifier);
         chainId = block.chainid;
+    }
+
+    /**
+     * @notice Starts a two-step ownership transfer. The new owner must call acceptOwnership.
+     *         Passing address(0) cancels a pending transfer.
+     */
+    function transferOwnership(address newOwner) external onlyOwner {
+        pendingOwner = newOwner;
+        emit OwnershipTransferStarted(owner, newOwner);
+    }
+
+    /// @notice Completes a pending ownership transfer; callable only by the pending owner.
+    function acceptOwnership() external {
+        if (msg.sender != pendingOwner) revert Unauthorized();
+        address previousOwner = owner;
+        owner = msg.sender;
+        pendingOwner = address(0);
+        emit OwnershipTransferred(previousOwner, msg.sender);
     }
 
     function setVerifier(address _newVerifier) external onlyOwner {
