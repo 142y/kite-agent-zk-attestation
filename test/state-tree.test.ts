@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { AgentStateTree } from '../src/state-tree.js';
+import { AgentStateTree, verifyInclusionPath } from '../src/state-tree.js';
 import { type Hex } from 'viem';
 import { concatHex, keccak256 } from 'viem';
 
@@ -50,5 +50,62 @@ describe('AgentStateTree', () => {
       expect(() => new AgentStateTree([leaf as Hex])).toThrow('32-byte');
       expect(() => new AgentStateTree().insertActionLeaf(leaf as Hex)).toThrow('32-byte');
     }
+  });
+});
+
+describe('action inclusion paths', () => {
+  const leaves = ['11', '22', '33', '44', '55'].map(x => ('0x' + x.repeat(32)) as Hex);
+  for (const size of [1, 2, 3, 4, 5]) {
+    it(`reconstructs the root for every index at size ${size}`, () => {
+      const tree = new AgentStateTree(leaves.slice(0, size));
+      for (let index = 0; index < size; index++) {
+        let hash = keccak256(concatHex(['0x00', leaves[index]]));
+        for (const step of tree.getInclusionPath(index)) {
+          const pair = step.position === 'left' ? [step.hash, hash] : [hash, step.hash];
+          hash = keccak256(concatHex(['0x01', ...pair]));
+        }
+        expect(hash).toBe(tree.getRoot());
+      }
+    });
+  }
+
+  it('rejects indices without an existing leaf', () => {
+    const tree = new AgentStateTree(leaves);
+    for (const index of [-1, 0.5, NaN, Infinity, leaves.length]) {
+      expect(() => tree.getInclusionPath(index)).toThrow(RangeError);
+    }
+    expect(() => new AgentStateTree().getInclusionPath(0)).toThrow(RangeError);
+  });
+});
+
+describe('verifyInclusionPath', () => {
+  const leaves = ['ab', 'cd', 'ef'].map(x => ('0x' + x.repeat(32)) as Hex);
+  const tree = new AgentStateTree(leaves);
+  const root = tree.getRoot();
+  const path = tree.getInclusionPath(0);
+
+  it('checks disclosures against a trusted root, including odd and singleton trees', () => {
+    for (const [i, leaf] of leaves.entries()) {
+      expect(verifyInclusionPath(leaf, tree.getInclusionPath(i), root)).toBe(true);
+    }
+    const one = new AgentStateTree([leaves[0]]);
+    expect(verifyInclusionPath(leaves[0], [], one.getRoot())).toBe(true);
+    expect(verifyInclusionPath(leaves[0], path, ('0x' + root.slice(2).toUpperCase()) as Hex)).toBe(true);
+  });
+
+  it('rejects altered leaves, roots, step order, side and hash', () => {
+    expect(verifyInclusionPath(leaves[1], path, root)).toBe(false);
+    expect(verifyInclusionPath(leaves[0], path, leaves[1])).toBe(false);
+    expect(verifyInclusionPath(leaves[0], [...path].reverse(), root)).toBe(false);
+    expect(verifyInclusionPath(leaves[0], [{...path[0], position: 'left'}, path[1]], root)).toBe(false);
+    expect(verifyInclusionPath(leaves[0], [{...path[0], hash: leaves[0]}, path[1]], root)).toBe(false);
+  });
+
+  it('rejects malformed values received from JSON', () => {
+    for (const input of ['null', '[null]', '[{}]', '[{"hash":"0x00","position":"left"}]']) {
+      expect(verifyInclusionPath(leaves[0], JSON.parse(input), root)).toBe(false);
+    }
+    expect(verifyInclusionPath('0x01', path, root)).toBe(false);
+    expect(verifyInclusionPath(leaves[0], path, '0x')).toBe(false);
   });
 });

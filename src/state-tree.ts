@@ -5,6 +5,32 @@ export interface MerkleStep {
   position: 'left' | 'right';
 }
 
+function isDigest(value: unknown): value is Hex {
+  return typeof value === 'string' && /^0x[0-9a-fA-F]{64}$/.test(value);
+}
+
+function hashLeaf(leaf: Hex): Hex {
+  return keccak256(concatHex(['0x00', leaf]));
+}
+
+function hashPair(left: Hex, right: Hex): Hex {
+  return keccak256(concatHex(['0x01', left, right]));
+}
+
+/** Check a disclosed action against an independently trusted Kite state root. */
+export function verifyInclusionPath(action: Hex, path: readonly MerkleStep[], root: Hex): boolean {
+  if (!isDigest(action) || !isDigest(root) || !Array.isArray(path)) return false;
+
+  let node = hashLeaf(action);
+  for (const step of path) {
+    if (!isDigest(step?.hash)) return false;
+    if (step.position === 'left') node = hashPair(step.hash, node);
+    else if (step.position === 'right') node = hashPair(node, step.hash);
+    else return false;
+  }
+  return node === root.toLowerCase();
+}
+
 /**
  * Utility for aggregating agent execution actions into a Merkle digest
  */
@@ -29,13 +55,35 @@ export class AgentStateTree {
     if (this.leaves.length === 0) {
       return ('0x' + '0'.repeat(64)) as Hex;
     }
-    let currentLevel = this.leaves.map((leaf) => keccak256(concatHex(['0x00', leaf])));
+    return this.reduceTree();
+  }
+
+  /** Sibling hashes ordered from the leaf toward the root. */
+  public getInclusionPath(index: number): MerkleStep[] {
+    if (!Number.isSafeInteger(index) || index < 0 || index >= this.leaves.length) {
+      throw new RangeError('Leaf index outside the state tree');
+    }
+    const steps: MerkleStep[] = [];
+    this.reduceTree({ index, steps });
+    return steps;
+  }
+
+  private reduceTree(path?: { index: number; steps: MerkleStep[] }): Hex {
+    let currentLevel = this.leaves.map(hashLeaf);
 
     while (currentLevel.length > 1) {
+      if (path) {
+        const isRight = path.index % 2 === 1;
+        const sibling = isRight ? path.index - 1 : path.index + 1;
+        if (sibling < currentLevel.length) {
+          path.steps.push({ hash: currentLevel[sibling], position: isRight ? 'left' : 'right' });
+        }
+        path.index = Math.floor(path.index / 2);
+      }
       const nextLevel: Hex[] = [];
       for (let i = 0; i < currentLevel.length; i += 2) {
         if (i + 1 < currentLevel.length) {
-          nextLevel.push(this.hashPair(currentLevel[i], currentLevel[i + 1]));
+          nextLevel.push(hashPair(currentLevel[i], currentLevel[i + 1]));
         } else {
           nextLevel.push(currentLevel[i]);
         }
@@ -46,12 +94,8 @@ export class AgentStateTree {
     return currentLevel[0];
   }
 
-  private hashPair(a: Hex, b: Hex): Hex {
-    return keccak256(concatHex(['0x01', a, b]));
-  }
-
   private validateLeaf(leaf: Hex): void {
-    if (!/^0x[0-9a-fA-F]{64}$/.test(leaf)) {
+    if (!isDigest(leaf)) {
       throw new Error('Action leaves must be 32-byte hex digests');
     }
   }
