@@ -119,4 +119,24 @@ describe("BatchAttestationPipeline", () => {
     expect(res.acceptedCount).toBe(1);
     expect(res.rejectedCount).toBe(1);
   });
+
+  it("rejects malformed proofs without throwing when strictEpochOrdering is enabled", async () => {
+    const relay = new KiteZKAttestationRelay(KITE_TESTNET_CONFIG, () => true);
+    const pipeline = new BatchAttestationPipeline(relay);
+
+    const valid = {
+      agentId: "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      stateHash: "0x1111111111111111111111111111111111111111111111111111111111111111",
+      computationEpoch: 1n,
+      x402ReceiptHash: "0x2222222222222222222222222222222222222222222222222222222222222222",
+      zkProof: "0x1234567890abcdef",
+    } as AgentExecutionProof;
+    const malformed = { stateHash: valid.stateHash, computationEpoch: 2n } as unknown as AgentExecutionProof;
+
+    const res = await pipeline.processBatch({ proofs: [malformed, valid], strictEpochOrdering: true });
+    expect(res.totalProcessed).toBe(2);
+    expect(res.acceptedCount).toBe(1);
+    expect(res.rejectedCount).toBe(1);
+    expect(res.rejections[0].reason).toContain("Schema validation failed");
+  });
 });

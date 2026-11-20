@@ -40,7 +40,7 @@ export const KITE_TESTNET_CONFIG: KiteNetworkConfig = {
   name: 'Kite Testnet',
   chainId: 2368,
   rpcUrl: 'https://rpc-testnet.gokite.ai',
-  contractAddress: '0x89C57532A1553fbe98A008Fe3960098f9E7C0572',
+  contractAddress: '0x89c57532A1553FBe98a008fe3960098f9E7C0572',
   facilitatorUrl: 'https://facilitator-testnet.gokite.ai',
 };
 
@@ -48,6 +48,6 @@ export const KITE_MAINNET_CONFIG: KiteNetworkConfig = {
   name: 'Kite Mainnet',
   chainId: 2366,
   rpcUrl: 'https://rpc.gokite.ai',
-  contractAddress: '0x2A1553fbe98A008Fe3960098f9E7C057289C5753',
+  contractAddress: '0x2A1553fbe98a008fe3960098f9e7c057289C5753',
   facilitatorUrl: 'https://facilitator.gokite.ai',
 };

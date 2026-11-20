@@ -1,4 +1,4 @@
-import { type Hex } from "viem";
+import { type Hex } from 'viem';
 
 export interface PruningFilter {
   maxAgeMs?: number;
@@ -23,6 +23,12 @@ export interface PruningReport {
   prunedEpochs: Array<{ agentId: Hex; epoch: bigint }>;
 }
 
+function assertMaxAgeMs(value: number, field: string): void {
+  if (!Number.isFinite(value) || value < 0) {
+    throw new RangeError(`${field} must be a non-negative finite number`);
+  }
+}
+
 /**
  * AttestationPrunerDaemon
  * Manages cache lifecycle and purges expired epoch attestation proofs from local hot storage
@@ -33,11 +39,19 @@ export class AttestationPrunerDaemon {
   private maxRetainedCapacity?: number;
 
   constructor(defaultMaxAgeMs: number = 86_400_000, maxRetainedCapacity?: number) {
+    assertMaxAgeMs(defaultMaxAgeMs, 'defaultMaxAgeMs');
     this.defaultMaxAgeMs = defaultMaxAgeMs;
+    if (maxRetainedCapacity !== undefined
+      && (!Number.isSafeInteger(maxRetainedCapacity) || maxRetainedCapacity <= 0)) {
+      throw new RangeError('maxRetainedCapacity must be a positive safe integer');
+    }
     this.maxRetainedCapacity = maxRetainedCapacity;
   }
 
   public recordAttestation(entry: EpochArchiveEntry): void {
+    if (!Number.isFinite(entry.anchoredTimestamp) || entry.anchoredTimestamp <= 0) {
+      throw new RangeError('anchoredTimestamp must be a positive finite number');
+    }
     this.archive.push({ ...entry });
 
     // Enforce high-watermark capacity if set
@@ -70,6 +84,7 @@ export class AttestationPrunerDaemon {
    */
   public prune(filter: PruningFilter = {}): PruningReport {
     const maxAgeMs = filter.maxAgeMs ?? this.defaultMaxAgeMs;
+    assertMaxAgeMs(maxAgeMs, 'maxAgeMs');
     const now = Date.now();
     const thresholdEpoch = filter.retentionEpochThreshold;
     const targetAgents = filter.targetAgentIds?.map((id) => id.toLowerCase());
@@ -78,20 +93,16 @@ export class AttestationPrunerDaemon {
     const pruned: EpochArchiveEntry[] = [];
 
     for (const item of this.archive) {
-      const matchesAgent =
-        !targetAgents || targetAgents.includes(item.agentId.toLowerCase());
-
+      const matchesAgent = !targetAgents || targetAgents.includes(item.agentId.toLowerCase());
       if (matchesAgent) {
         const isExpiredByAge = now - item.anchoredTimestamp > maxAgeMs;
-        const isExpiredByEpoch =
-          thresholdEpoch !== undefined && item.epoch < thresholdEpoch;
+        const isExpiredByEpoch = thresholdEpoch !== undefined && item.epoch < thresholdEpoch;
 
         if (isExpiredByAge || isExpiredByEpoch) {
           pruned.push(item);
           continue;
         }
       }
-
       retained.push(item);
     }
 

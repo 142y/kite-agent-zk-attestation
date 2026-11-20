@@ -84,6 +84,48 @@ describe('KiteZKAttestationRelay', () => {
     expect((await older).valid).toBe(false);
   });
 
+  it('copies constructor network config so caller edits cannot retarget the relay', () => {
+    const config = { ...KITE_TESTNET_CONFIG };
+    const checked = new KiteZKAttestationRelay(config, () => true);
+    config.chainId = 1;
+    config.rpcUrl = 'https://attacker.invalid';
+
+    expect(checked.getNetworkConfig()).toEqual(KITE_TESTNET_CONFIG);
+  });
+
+  it('returns network config snapshots that cannot mutate relay state', () => {
+    const snapshot = relay.getNetworkConfig();
+    snapshot.chainId = 1;
+    snapshot.contractAddress = '0x0000000000000000000000000000000000000000';
+
+    expect(relay.getNetworkConfig()).toEqual(KITE_TESTNET_CONFIG);
+  });
+
+  it.each([0, -1, 1.5, Number.NaN])('rejects invalid chain ID %s at construction', (chainId) => {
+    const config = { ...KITE_TESTNET_CONFIG, chainId };
+    expect(() => new KiteZKAttestationRelay(config, () => true)).toThrow('positive safe integer');
+  });
+
+  it.each(['0x0', '0x1234', 'not-an-address'])('rejects malformed contract address %s', (contractAddress) => {
+    const config = { ...KITE_TESTNET_CONFIG, contractAddress };
+    expect(() => new KiteZKAttestationRelay(config, () => true)).toThrow('20-byte hex address');
+  });
+
+  it('rejects malformed or credentialed endpoint URLs', () => {
+    for (const rpcUrl of ['not-a-url', 'file:///tmp/rpc', 'https://user:secret@example.com']) {
+      expect(() => new KiteZKAttestationRelay({ ...KITE_TESTNET_CONFIG, rpcUrl }, () => true)).toThrow('RPC URL');
+    }
+    expect(() => new KiteZKAttestationRelay({
+      ...KITE_TESTNET_CONFIG,
+      facilitatorUrl: 'ftp://facilitator.example.com',
+    }, () => true)).toThrow('Facilitator URL');
+  });
+
+  it('rejects an empty network name', () => {
+    expect(() => new KiteZKAttestationRelay({ ...KITE_TESTNET_CONFIG, name: '  ' }, () => true))
+      .toThrow('Network name');
+  });
+
   it('rejects epochs outside the ABI uint256 bound without calling a verifier', async () => {
     const checked = new KiteZKAttestationRelay(KITE_TESTNET_CONFIG, () => { throw new Error('must not run'); });
     expect((await checked.verifyAttestationProof({ ...validProof, computationEpoch: 2n ** 256n })).valid).toBe(false);

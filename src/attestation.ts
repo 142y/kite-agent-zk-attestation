@@ -4,6 +4,7 @@ import {
   type Hex,
   toHex,
   pad,
+  zeroHash,
 } from 'viem';
 import {
   AgentExecutionProof,
@@ -19,6 +20,29 @@ export type AttestationProofVerifier = (
   publicInputs: readonly [Hex, Hex, Hex, Hex]
 ) => boolean | Promise<boolean>;
 
+function validateNetworkConfig(config: KiteNetworkConfig): void {
+  if (!config.name.trim()) {
+    throw new Error('Network name must not be empty');
+  }
+  if (!Number.isSafeInteger(config.chainId) || config.chainId <= 0) {
+    throw new Error('Network chain ID must be a positive safe integer');
+  }
+  if (!/^0x[0-9a-fA-F]{40}$/.test(config.contractAddress)) {
+    throw new Error('Network contract address must be a 20-byte hex address');
+  }
+  for (const [field, value] of [['RPC', config.rpcUrl], ['Facilitator', config.facilitatorUrl]] as const) {
+    let url: URL;
+    try {
+      url = new URL(value);
+    } catch {
+      throw new Error(`${field} URL must be an absolute HTTP(S) URL`);
+    }
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
+      throw new Error(`${field} URL must be an HTTP(S) URL without credentials`);
+    }
+  }
+}
+
 export class KiteZKAttestationRelay {
   private config: KiteNetworkConfig;
   private knownEpochs: Map<string, bigint> = new Map();
@@ -27,7 +51,9 @@ export class KiteZKAttestationRelay {
     config: KiteNetworkConfig = KITE_TESTNET_CONFIG,
     private readonly verifyProof?: AttestationProofVerifier
   ) {
-    this.config = config;
+    const configSnapshot = { ...config };
+    validateNetworkConfig(configSnapshot);
+    this.config = configSnapshot;
   }
 
   /**
@@ -52,9 +78,11 @@ export class KiteZKAttestationRelay {
     if (!parseResult.success) {
       return {
         valid: false,
-        attestationDigest: '0x0' as Hex,
+        // Use 32-byte zero sentinels so rejected results remain valid bytes32 values
+        // for logging, ABI encoding and on-chain anchoring paths.
+        attestationDigest: zeroHash,
         epoch: 0n,
-        agentId: '0x0' as Hex,
+        agentId: zeroHash,
         rejectionReason: `Schema validation failed: ${parseResult.error.issues.map(i => i.message).join(', ')}`,
       };
     }
@@ -127,6 +155,6 @@ export class KiteZKAttestationRelay {
   }
 
   public getNetworkConfig(): KiteNetworkConfig {
-    return this.config;
+    return { ...this.config };
   }
 }

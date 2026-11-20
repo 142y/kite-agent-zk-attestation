@@ -41,6 +41,27 @@ test('verifier configuration and proof rejection on a private, in-process EVM', 
       await assert.rejects(registry.simulate.setVerifier([mock.address], { account: other }));
       assert.equal((await registry.read.verifier()).toLowerCase(), mock.address.toLowerCase());
     });
+    await t.test('ownership transfers in two steps and only to the pending owner', async () => {
+      await assert.rejects(registry.simulate.transferOwnership([other], { account: other }));
+      await publicClient.waitForTransactionReceipt({ hash: await registry.write.transferOwnership([other], { account: owner }) });
+      assert.equal((await registry.read.owner()).toLowerCase(), owner.toLowerCase());
+      assert.equal((await registry.read.pendingOwner()).toLowerCase(), other.toLowerCase());
+      await assert.rejects(registry.simulate.acceptOwnership({ account: owner }));
+      await publicClient.waitForTransactionReceipt({ hash: await registry.write.acceptOwnership({ account: other }) });
+      assert.equal((await registry.read.owner()).toLowerCase(), other.toLowerCase());
+      assert.equal(await registry.read.pendingOwner(), zeroAddress);
+      await assert.rejects(registry.simulate.setVerifier([mock.address], { account: owner }));
+      // Hand ownership back so later subtests keep using the original owner.
+      await publicClient.waitForTransactionReceipt({ hash: await registry.write.transferOwnership([owner], { account: other }) });
+      await publicClient.waitForTransactionReceipt({ hash: await registry.write.acceptOwnership({ account: owner }) });
+      assert.equal((await registry.read.owner()).toLowerCase(), owner.toLowerCase());
+    });
+    await t.test('a pending transfer can be cancelled by the owner', async () => {
+      await publicClient.waitForTransactionReceipt({ hash: await registry.write.transferOwnership([other], { account: owner }) });
+      await publicClient.waitForTransactionReceipt({ hash: await registry.write.transferOwnership([zeroAddress], { account: owner }) });
+      await assert.rejects(registry.simulate.acceptOwnership({ account: other }));
+      assert.equal((await registry.read.owner()).toLowerCase(), owner.toLowerCase());
+    });
     const args = ['0x' + '11'.repeat(32), '0x' + '22'.repeat(32), 1n, '0x' + '33'.repeat(32), '0x' + '44'.repeat(32)];
     await t.test('a rejected mock proof cannot advance an epoch', async () => {
       await publicClient.waitForTransactionReceipt({ hash: await mock.write.setShouldPass([false], { account: owner }) });
