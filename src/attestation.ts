@@ -5,6 +5,8 @@ import {
   toHex,
   pad,
   zeroHash,
+  isAddress,
+  zeroAddress,
 } from 'viem';
 import {
   AgentExecutionProof,
@@ -21,14 +23,18 @@ export type AttestationProofVerifier = (
 ) => boolean | Promise<boolean>;
 
 function validateNetworkConfig(config: KiteNetworkConfig): void {
-  if (!config.name.trim()) {
+  if (typeof config.name !== 'string' || !config.name.trim()) {
     throw new Error('Network name must not be empty');
   }
   if (!Number.isSafeInteger(config.chainId) || config.chainId <= 0) {
     throw new Error('Network chain ID must be a positive safe integer');
   }
-  if (!/^0x[0-9a-fA-F]{40}$/.test(config.contractAddress)) {
-    throw new Error('Network contract address must be a 20-byte hex address');
+  // Strict mode: lowercase/uppercase addresses pass, mixed-case must carry a valid EIP-55 checksum.
+  if (typeof config.contractAddress !== 'string' || !isAddress(config.contractAddress, { strict: true })) {
+    throw new Error('Network contract address must be a 20-byte hex address with a valid EIP-55 checksum');
+  }
+  if (config.contractAddress.toLowerCase() === zeroAddress) {
+    throw new Error('Network contract address must not be the zero address');
   }
   for (const [field, value] of [['RPC', config.rpcUrl], ['Facilitator', config.facilitatorUrl]] as const) {
     let url: URL;
