@@ -1,4 +1,4 @@
-import { type Hex } from 'viem';
+import { type Hex, isHex } from 'viem';
 
 export interface PruningFilter {
   maxAgeMs?: number;
@@ -49,6 +49,15 @@ export class AttestationPrunerDaemon {
   }
 
   public recordAttestation(entry: EpochArchiveEntry): void {
+    if (typeof entry.epoch !== 'bigint' || entry.epoch <= 0n) {
+      throw new RangeError('epoch must be a positive bigint');
+    }
+    if (!isHex(entry.agentId)) {
+      throw new Error('agentId must be a hex string');
+    }
+    if (!isHex(entry.attestationDigest)) {
+      throw new Error('attestationDigest must be a hex string');
+    }
     if (!Number.isFinite(entry.anchoredTimestamp) || entry.anchoredTimestamp <= 0) {
       throw new RangeError('anchoredTimestamp must be a positive finite number');
     }
@@ -87,6 +96,16 @@ export class AttestationPrunerDaemon {
     assertMaxAgeMs(maxAgeMs, 'maxAgeMs');
     const now = Date.now();
     const thresholdEpoch = filter.retentionEpochThreshold;
+    if (thresholdEpoch !== undefined && (typeof thresholdEpoch !== 'bigint' || thresholdEpoch < 0n)) {
+      throw new RangeError('retentionEpochThreshold must be a non-negative bigint');
+    }
+    if (filter.targetAgentIds !== undefined) {
+      for (const id of filter.targetAgentIds) {
+        if (!isHex(id)) {
+          throw new Error('targetAgentIds entries must be hex strings');
+        }
+      }
+    }
     const targetAgents = filter.targetAgentIds?.map((id) => id.toLowerCase());
 
     const retained: EpochArchiveEntry[] = [];
