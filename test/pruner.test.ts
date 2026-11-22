@@ -119,4 +119,93 @@ describe('AttestationPrunerDaemon', () => {
     expect(daemon.prune({ maxAgeMs: 0 }).prunedCount).toBe(1);
     expect(daemon.getRecordCount()).toBe(0);
   });
+
+  it.each(['not-hex', '', '0xzz', '0x123g'])(
+    'rejects non-hex agentId %s without recording it',
+    (agentId) => {
+      expect(() => daemon.recordAttestation({
+        agentId: agentId as Hex,
+        epoch: 1n,
+        anchoredTimestamp: Date.now(),
+        attestationDigest: digest1,
+      })).toThrow('agentId must be a hex string');
+      expect(daemon.getRecordCount()).toBe(0);
+    }
+  );
+
+  it.each(['not-hex', '', '0xzz'])(
+    'rejects non-hex attestationDigest %s without recording it',
+    (attestationDigest) => {
+      expect(() => daemon.recordAttestation({
+        agentId: agent1,
+        epoch: 1n,
+        anchoredTimestamp: Date.now(),
+        attestationDigest: attestationDigest as Hex,
+      })).toThrow('attestationDigest must be a hex string');
+      expect(daemon.getRecordCount()).toBe(0);
+    }
+  );
+
+  it.each([0n, -1n, 1, '1', undefined])(
+    'rejects invalid epoch %s without recording it',
+    (epoch) => {
+      expect(() => daemon.recordAttestation({
+        agentId: agent1,
+        epoch: epoch as bigint,
+        anchoredTimestamp: Date.now(),
+        attestationDigest: digest1,
+      })).toThrow('epoch must be a positive bigint');
+      expect(daemon.getRecordCount()).toBe(0);
+    }
+  );
+
+  it.each([1, '0n', -1n])(
+    'rejects invalid retentionEpochThreshold %s before modifying the archive',
+    (threshold) => {
+      daemon.recordAttestation({
+        agentId: agent1,
+        epoch: 10n,
+        anchoredTimestamp: Date.now(),
+        attestationDigest: digest1,
+      });
+      expect(() => daemon.prune({ retentionEpochThreshold: threshold as bigint }))
+        .toThrow('retentionEpochThreshold must be a non-negative bigint');
+      expect(daemon.getRecordCount()).toBe(1);
+    }
+  );
+
+  it('rejects non-hex targetAgentIds before modifying the archive', () => {
+    daemon.recordAttestation({
+      agentId: agent1,
+      epoch: 10n,
+      anchoredTimestamp: Date.now(),
+      attestationDigest: digest1,
+    });
+    expect(() => daemon.prune({ targetAgentIds: ['zzz'] as unknown as Hex[] }))
+      .toThrow('targetAgentIds entries must be hex strings');
+    expect(() => daemon.prune({ targetAgentIds: ['0xaa', 'not-hex'] as unknown as Hex[] }))
+      .toThrow('targetAgentIds entries must be hex strings');
+    expect(() => daemon.prune({ targetAgentIds: [''] as unknown as Hex[] }))
+      .toThrow('targetAgentIds entries must be hex strings');
+    expect(daemon.getRecordCount()).toBe(1);
+  });
+
+  it('accepts a non-negative bigint retentionEpochThreshold and prunes below it', () => {
+    daemon.recordAttestation({
+      agentId: agent1,
+      epoch: 5n,
+      anchoredTimestamp: Date.now(),
+      attestationDigest: digest1,
+    });
+    daemon.recordAttestation({
+      agentId: agent1,
+      epoch: 6n,
+      anchoredTimestamp: Date.now(),
+      attestationDigest: digest1,
+    });
+
+    const report = daemon.prune({ retentionEpochThreshold: 6n });
+    expect(report.prunedCount).toBe(1);
+    expect(daemon.getRecords().map((r) => r.epoch)).toEqual([6n]);
+  });
 });
