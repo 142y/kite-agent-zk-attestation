@@ -157,4 +157,35 @@ export class KiteZKAttestationRelay {
   public getNetworkConfig(): KiteNetworkConfig {
     return { ...this.config };
   }
+
+  /** Number of agents currently tracked in the epoch cache. */
+  public knownAgentCount(): number {
+    return this.knownEpochs.size;
+  }
+
+  /** Highest accepted epoch registered for an agent, or null when untracked. */
+  public lastAcceptedEpoch(agentId: Hex): bigint | null {
+    if (!/^0x[0-9a-fA-F]{64}$/.test(agentId)) {
+      throw new Error('agentId must be a 32-byte hex string');
+    }
+    const epoch = this.knownEpochs.get(agentId.toLowerCase());
+    return epoch === undefined ? null : epoch;
+  }
+
+  /**
+   * Removes an agent from the epoch cache so its operator can retire or re-register it.
+   * Returns true when the agent was tracked. Callers must re-attest from a fresh epoch,
+   * since forgetting an agent reopens its replay window.
+   */
+  public forgetAgent(agentId: Hex): boolean {
+    if (!/^0x[0-9a-fA-F]{64}$/.test(agentId)) {
+      throw new Error('agentId must be a 32-byte hex string');
+    }
+    return this.knownEpochs.delete(agentId.toLowerCase());
+  }
+
+  /** Drops every tracked agent from the epoch cache. */
+  public clearKnownEpochs(): void {
+    this.knownEpochs.clear();
+  }
 }
