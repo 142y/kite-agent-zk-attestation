@@ -46,7 +46,18 @@ export class AgentStateTree {
   public insertActionLeaf(actionHash: Hex): void {
     this.validateLeaf(actionHash);
     this.leaves.push(actionHash);
-    this.levels = undefined;
+    if (!this.levels) return;
+
+    // An append can only change the rightmost node of each existing level.
+    let level = this.levels[0];
+    level.push(hashLeaf(actionHash));
+    for (let depth = 1; level.length > 1; depth++) {
+      const last = level.length - 1;
+      const parent = last % 2 === 0 ? level[last] : hashPair(level[last - 1], level[last]);
+      const parents = this.levels[depth] ??= [];
+      parents[Math.floor(last / 2)] = parent;
+      level = parents;
+    }
   }
 
   public getLeafCount(): number {
