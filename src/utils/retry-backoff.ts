@@ -12,6 +12,9 @@ export async function executeWithJitterRetry<T>(
 ): Promise<T> {
   const { maxRetries = 3, baseDelayMs = 200, maxDelayMs = 3000, shouldRetry } = options;
 
+  if (typeof operation !== 'function') {
+    throw new TypeError('operation must be a function');
+  }
   if (!Number.isSafeInteger(maxRetries) || maxRetries < 0) {
     throw new RangeError('maxRetries must be a non-negative safe integer');
   }
@@ -32,7 +35,9 @@ export async function executeWithJitterRetry<T>(
       if (attempt > maxRetries || (shouldRetry && !shouldRetry(err, attempt))) {
         throw err;
       }
-      const expDelay = Math.min(maxDelayMs, baseDelayMs * Math.pow(2, attempt));
+      // Cap the exponent: 2 ** attempt overflows to Infinity past 1023, and
+      // 0 * Infinity would otherwise produce a NaN delay.
+      const expDelay = Math.min(maxDelayMs, baseDelayMs * Math.pow(2, Math.min(attempt, 52)));
       const jittered = Math.floor(Math.random() * expDelay);
       await new Promise(resolve => setTimeout(resolve, jittered));
     }
