@@ -43,3 +43,14 @@ describe('SnarkRecursionOptimizer', () => {
     expect(() => optimizer.foldProofs([])).toThrow('Cannot fold an empty proof set');
   });
 });
+
+describe('SnarkRecursionOptimizer input validation', () => {
+  const optimizer = new SnarkRecursionOptimizer();
+
+  it.each([null, undefined, {}, 'proofs', 42])('rejects non-array proofs (%s) with a TypeError', (bad) => {
+    expect(() => optimizer.commitProofs(bad as never)).toThrow(TypeError);
+    expect(() => optimizer.commitProofs(bad as never)).toThrow('proofs must be an array');
+    expect(() => optimizer.evaluateCompression(bad as never)).toThrow('proofs must be an array');
+    expect(() => optimizer.foldProofs(bad as never)).toThrow('proofs must be an array');
+  });
+});
