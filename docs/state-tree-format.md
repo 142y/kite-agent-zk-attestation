@@ -38,3 +38,12 @@ Obtain the root independently from the attestation being checked. The
 function checks membership of the action digest and returns false on a
 mismatch or malformed step. It does not establish an action index, tree
 size, or correctness of the attestation's ZK proof.
+
+## Measuring repeated reads and appends
+
+Run `npm run bench:state-tree` to compare a tree with warmed Merkle levels
+against constructing a fresh tree for each operation. The script measures
+32 inclusion paths and 32 successive appends with a root read after each.
+It compares every path and root outside the timed sections, discards one
+warm-up round and reports median workload times. Fresh-tree timings include
+construction. Run both workloads on the same machine when comparing changes.
