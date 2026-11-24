@@ -51,6 +51,9 @@ export class KiteZKAttestationRelay {
     config: KiteNetworkConfig = KITE_TESTNET_CONFIG,
     private readonly verifyProof?: AttestationProofVerifier
   ) {
+    if (verifyProof !== undefined && typeof verifyProof !== 'function') {
+      throw new TypeError('Proof verifier must be a function when provided');
+    }
     const configSnapshot = { ...config };
     validateNetworkConfig(configSnapshot);
     this.config = configSnapshot;

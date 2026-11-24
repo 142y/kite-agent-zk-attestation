@@ -121,6 +121,18 @@ describe('KiteZKAttestationRelay', () => {
     }, () => true)).toThrow('Facilitator URL');
   });
 
+  it.each([null, {}, 'verifier', 42, true])('rejects non-function proof verifier %s at construction', (verifier) => {
+    expect(() => new KiteZKAttestationRelay(KITE_TESTNET_CONFIG, verifier as never))
+      .toThrow('Proof verifier must be a function');
+  });
+
+  it('still allows constructing a relay without a verifier', async () => {
+    const unverified = new KiteZKAttestationRelay(KITE_TESTNET_CONFIG);
+    const result = await unverified.verifyAttestationProof(validProof);
+    expect(result.valid).toBe(false);
+    expect(result.rejectionReason).toBe('No proof verifier configured');
+  });
+
   it('rejects an empty network name', () => {
     expect(() => new KiteZKAttestationRelay({ ...KITE_TESTNET_CONFIG, name: '  ' }, () => true))
       .toThrow('Network name');
