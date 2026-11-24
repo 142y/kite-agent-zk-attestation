@@ -21,7 +21,7 @@ export type AttestationProofVerifier = (
 ) => boolean | Promise<boolean>;
 
 function validateNetworkConfig(config: KiteNetworkConfig): void {
-  if (!config.name.trim()) {
+  if (typeof config.name !== 'string' || !config.name.trim()) {
     throw new Error('Network name must not be empty');
   }
   if (!Number.isSafeInteger(config.chainId) || config.chainId <= 0) {
@@ -51,6 +51,9 @@ export class KiteZKAttestationRelay {
     config: KiteNetworkConfig = KITE_TESTNET_CONFIG,
     private readonly verifyProof?: AttestationProofVerifier
   ) {
+    if (typeof config !== 'object' || config === null || Array.isArray(config)) {
+      throw new TypeError('Network config must be an object');
+    }
     const configSnapshot = { ...config };
     validateNetworkConfig(configSnapshot);
     this.config = configSnapshot;
