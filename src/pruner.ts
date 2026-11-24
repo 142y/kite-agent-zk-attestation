@@ -83,6 +83,17 @@ export class AttestationPrunerDaemon {
    * Runs GC cycle based on age, epoch boundaries, and optional agent filters
    */
   public prune(filter: PruningFilter = {}): PruningReport {
+    const { retained, report } = this.planPruning(filter);
+    this.archive = retained;
+    return report;
+  }
+
+  /** Report what prune would remove from the current archive at the current time. */
+  public previewPrune(filter: PruningFilter = {}): PruningReport {
+    return this.planPruning(filter).report;
+  }
+
+  private planPruning(filter: PruningFilter): { retained: EpochArchiveEntry[]; report: PruningReport } {
     const maxAgeMs = filter.maxAgeMs ?? this.defaultMaxAgeMs;
     assertMaxAgeMs(maxAgeMs, 'maxAgeMs');
     const now = Date.now();
@@ -106,13 +117,12 @@ export class AttestationPrunerDaemon {
       retained.push(item);
     }
 
-    this.archive = retained;
-
-    return {
+    const report = {
       scannedCount: retained.length + pruned.length,
       prunedCount: pruned.length,
       retainedCount: retained.length,
       prunedEpochs: pruned.map((p) => ({ agentId: p.agentId, epoch: p.epoch })),
     };
+    return { retained, report };
   }
 }

@@ -48,6 +48,21 @@ describe('AttestationPrunerDaemon', () => {
     expect(filtered.getRecords()[0].agentId).toBe('0xbb');
   });
 
+  it('previews the same candidates as pruning without modifying the archive', () => {
+    for (const [agentId, epoch] of [[agent1, 1n], [digest1, 1n], [agent1, 2n]] as const) {
+      daemon.recordAttestation({ agentId, epoch, anchoredTimestamp: Date.now(), attestationDigest: digest1 });
+    }
+    const filter = { targetAgentIds: [agent1], retentionEpochThreshold: 2n };
+    const before = daemon.getRecords();
+    const preview = daemon.previewPrune(filter);
+    expect(preview).toEqual({
+      scannedCount: 3, retainedCount: 2, prunedCount: 1, prunedEpochs: [{ agentId: agent1, epoch: 1n }],
+    });
+    expect(daemon.getRecords()).toEqual(before);
+    expect(daemon.prune(filter)).toEqual(preview);
+    expect(daemon.getRecordCount()).toBe(2);
+  });
+
   it('filters records by agent correctly', () => {
     daemon.recordAttestation({
       agentId: agent1,
