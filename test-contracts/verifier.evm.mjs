@@ -74,6 +74,25 @@ test('verifier configuration and proof rejection on a private, in-process EVM', 
       assert.equal(receipt.status, 'success');
       assert.equal(await registry.read.agentLatestEpoch([args[0]]), 1n);
     });
+    await t.test('replayed and rolled-back epochs revert and leave state untouched', async () => {
+      // The mock verifier accepts proofs here, so only epoch monotonicity can cause these reverts.
+      // args (epoch 1) was anchored above; the same epoch must not be accepted again.
+      await assert.rejects(registry.simulate.anchorAttestation(args, { account: owner }));
+      const next = [args[0], args[1], 3n, args[3], args[4]];
+      await publicClient.waitForTransactionReceipt({ hash: await registry.write.anchorAttestation(next, { account: owner, gas: 500_000n }) });
+      assert.equal(await registry.read.agentLatestEpoch([args[0]]), 3n);
+      // A lower, never-used epoch is a rollback and must revert without changing the latest epoch.
+      const rollback = [args[0], '0x' + '55'.repeat(32), 2n, args[3], args[4]];
+      await assert.rejects(registry.simulate.anchorAttestation(rollback, { account: owner }));
+      assert.equal(await registry.read.agentLatestEpoch([args[0]]), 3n);
+    });
+    await t.test('epoch sequences are tracked independently per agent', async () => {
+      const otherAgent = ['0x' + 'aa'.repeat(32), args[1], 1n, args[3], args[4]];
+      const receipt = await publicClient.waitForTransactionReceipt({ hash: await registry.write.anchorAttestation(otherAgent, { account: owner, gas: 500_000n }) });
+      assert.equal(receipt.status, 'success');
+      assert.equal(await registry.read.agentLatestEpoch([otherAgent[0]]), 1n);
+      assert.equal(await registry.read.agentLatestEpoch([args[0]]), 3n);
+    });
   } finally {
     await provider.disconnect();
   }
