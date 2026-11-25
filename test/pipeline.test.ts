@@ -139,4 +139,48 @@ describe("BatchAttestationPipeline", () => {
     expect(res.rejectedCount).toBe(1);
     expect(res.rejections[0].reason).toContain("Schema validation failed");
   });
+
+  it("reports the last accepted epoch per agent, ignoring rejected proofs", async () => {
+    const relay = new KiteZKAttestationRelay(KITE_TESTNET_CONFIG, () => true);
+    const pipeline = new BatchAttestationPipeline(relay);
+
+    const agentA = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const agentB = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    const proofs: AgentExecutionProof[] = [
+      {
+        agentId: agentA,
+        stateHash: "0x1111111111111111111111111111111111111111111111111111111111111111",
+        computationEpoch: 10n,
+        x402ReceiptHash: "0x2222222222222222222222222222222222222222222222222222222222222222",
+        zkProof: "0x1111",
+      },
+      {
+        agentId: agentA,
+        stateHash: "0x3333333333333333333333333333333333333333333333333333333333333333",
+        computationEpoch: 12n,
+        x402ReceiptHash: "0x4444444444444444444444444444444444444444444444444444444444444444",
+        zkProof: "0x2222",
+      },
+      {
+        // Rejected replay for agent A
+        agentId: agentA,
+        stateHash: "0x5555555555555555555555555555555555555555555555555555555555555555",
+        computationEpoch: 8n,
+        x402ReceiptHash: "0x6666666666666666666666666666666666666666666666666666666666666666",
+        zkProof: "0x3333",
+      },
+      {
+        agentId: agentB,
+        stateHash: "0x7777777777777777777777777777777777777777777777777777777777777777",
+        computationEpoch: 5n,
+        x402ReceiptHash: "0x8888888888888888888888888888888888888888888888888888888888888888",
+        zkProof: "0x4444",
+      },
+    ];
+
+    const res = await pipeline.processBatch({ proofs });
+    expect(res.perAgentLastAcceptedEpoch[agentA.toLowerCase()]).toBe(12n);
+    expect(res.perAgentLastAcceptedEpoch[agentB.toLowerCase()]).toBe(5n);
+    expect(Object.keys(res.perAgentLastAcceptedEpoch)).toHaveLength(2);
+  });
 });
