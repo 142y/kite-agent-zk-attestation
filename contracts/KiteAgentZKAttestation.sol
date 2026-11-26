@@ -67,6 +67,9 @@ contract KiteAgentZKAttestation {
         owner = msg.sender;
         verifier = IKiteVerifier(_verifier);
         chainId = block.chainid;
+        // Log the initial configuration so indexers can rebuild it from events alone.
+        emit OwnershipTransferred(address(0), msg.sender);
+        emit VerifierUpdated(address(0), _verifier);
     }
 
     /**
