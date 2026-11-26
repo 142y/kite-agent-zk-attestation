@@ -81,6 +81,20 @@ describe('AttestationPrunerDaemon', () => {
     expect(daemon.previewPrune()).toEqual({ scannedCount: 0, prunedCount: 0, retainedCount: 0, prunedEpochs: [] });
   });
 
+  it('matches repeated and mixed-case target IDs once per archive entry in archive order', () => {
+    const agents: Hex[] = ['0xcc', '0xbb', '0xaa', '0xcc'];
+    agents.forEach((agentId, index) => daemon.recordAttestation({
+      agentId, epoch: BigInt(index), anchoredTimestamp: Date.now(), attestationDigest: digest1,
+    }));
+    const filter = { targetAgentIds: ['0xAA', '0xCC', '0xcc'] as Hex[], retentionEpochThreshold: 10n };
+    const report = daemon.previewPrune(filter);
+    expect(report.prunedEpochs).toEqual([
+      { agentId: '0xcc', epoch: 0n }, { agentId: '0xaa', epoch: 2n }, { agentId: '0xcc', epoch: 3n },
+    ]);
+    expect(daemon.prune(filter)).toEqual(report);
+    expect(daemon.getRecords().map(entry => entry.agentId)).toEqual(['0xbb']);
+  });
+
   it('filters records by agent correctly', () => {
     daemon.recordAttestation({
       agentId: agent1,

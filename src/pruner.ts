@@ -99,12 +99,14 @@ export class AttestationPrunerDaemon {
     assertMaxAgeMs(maxAgeMs, 'maxAgeMs');
     const now = Date.now();
     const thresholdEpoch = filter.retentionEpochThreshold;
-    const targetAgents = filter.targetAgentIds?.map((id) => id.toLowerCase());
+    const targetAgents = filter.targetAgentIds
+      ? new Set(filter.targetAgentIds.map(id => id.toLowerCase()))
+      : undefined;
 
     const prunedEpochs: PruningReport['prunedEpochs'] = [];
 
     for (const item of this.archive) {
-      const matchesAgent = !targetAgents || targetAgents.includes(item.agentId.toLowerCase());
+      const matchesAgent = !targetAgents || targetAgents.has(item.agentId.toLowerCase());
       if (matchesAgent) {
         const isExpiredByAge = now - item.anchoredTimestamp > maxAgeMs;
         const isExpiredByEpoch = thresholdEpoch !== undefined && item.epoch < thresholdEpoch;
