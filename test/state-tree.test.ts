@@ -45,6 +45,22 @@ describe('AgentStateTree', () => {
     expect(new AgentStateTree([a, b]).getRoot()).not.toBe(b);
   });
 
+  it('exposes a snapshot of committed leaves that callers cannot mutate', () => {
+    const leafA = ('0x' + '11'.repeat(32)) as Hex;
+    const leafB = ('0x' + '22'.repeat(32)) as Hex;
+    const tree = new AgentStateTree([leafA]);
+    tree.insertActionLeaf(leafB);
+
+    const snapshot = tree.getLeaves();
+    expect(snapshot).toEqual([leafA, leafB]);
+
+    (snapshot as Hex[]).push(('0x' + '33'.repeat(32)) as Hex);
+    (snapshot as Hex[])[0] = ('0x' + 'ff'.repeat(32)) as Hex;
+    expect(tree.getLeafCount()).toBe(2);
+    expect(tree.getLeaves()).toEqual([leafA, leafB]);
+    expect(tree.getRoot()).toBe(new AgentStateTree([leafA, leafB]).getRoot());
+  });
+
   it('rejects malformed leaves at construction and insertion', () => {
     for (const leaf of ['0x12', 'not-hex', '0x' + 'gg'.repeat(32)]) {
       expect(() => new AgentStateTree([leaf as Hex])).toThrow('32-byte');

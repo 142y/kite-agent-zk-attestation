@@ -51,6 +51,14 @@ export class AgentStateTree {
     return this.leaves.length;
   }
 
+  /**
+   * Returns a snapshot copy of the currently committed action leaves in insertion order.
+   * Callers can mutate the returned array without affecting the tree.
+   */
+  public getLeaves(): readonly Hex[] {
+    return [...this.leaves];
+  }
+
   public getRoot(): Hex {
     if (this.leaves.length === 0) {
       return ('0x' + '0'.repeat(64)) as Hex;
