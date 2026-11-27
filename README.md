@@ -77,3 +77,23 @@ Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for detai
 ## Batch commitment boundary
 
 The optimizer produces versioned hash commitments, not compressed or recursively verified proofs. See [batch-commitment-format.md](docs/batch-commitment-format.md) before migrating stored IDs or using the legacy foldProofs API.
+
+## Previewing archive cleanup
+
+Call `daemon.previewPrune(filter)` on an `AttestationPrunerDaemon` to inspect
+the candidate agent IDs, epochs and retained count before calling
+`daemon.prune(filter)`. Both use the same retention rules. The preview
+leaves the archive intact. A later prune evaluates the current records and
+time again, so entries added or aged past the cutoff can change the result.
+
+To save a preview as JSON, build the package and run the local example:
+
+~~~sh
+npm run build
+node examples/preview-pruning.cjs > preview.json
+~~~
+
+The example creates two in-memory entries and previews a cutoff between them.
+The report lists one candidate with epoch `"9007199254740993"`. Epochs are
+exported as decimal strings so they retain precision beyond JavaScript's safe
+integer range. Read one back with `BigInt(report.prunedEpochs[0].epoch)`.

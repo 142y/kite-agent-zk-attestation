@@ -74,6 +74,53 @@ describe('AttestationPrunerDaemon', () => {
     expect(filtered.getRecords()[0].agentId).toBe('0xbb');
   });
 
+  it('previews the same candidates as pruning without modifying the archive', () => {
+    for (const [agentId, epoch] of [[agent1, 1n], [digest1, 1n], [agent1, 2n]] as const) {
+      daemon.recordAttestation({ agentId, epoch, anchoredTimestamp: Date.now(), attestationDigest: digest1 });
+    }
+    const filter = { targetAgentIds: [agent1], retentionEpochThreshold: 2n };
+    const before = daemon.getRecords();
+    const preview = daemon.previewPrune(filter);
+    expect(preview).toEqual({
+      scannedCount: 3, retainedCount: 2, prunedCount: 1, prunedEpochs: [{ agentId: agent1, epoch: 1n }],
+    });
+    expect(daemon.getRecords()).toEqual(before);
+    expect(daemon.prune(filter)).toEqual(preview);
+    expect(daemon.getRecordCount()).toBe(2);
+  });
+
+  it('counts retained entries when a preview matches none or all of the archive', () => {
+    const epochs = [1n, 3n, 2n];
+    for (const epoch of epochs) {
+      daemon.recordAttestation({ agentId: agent1, epoch, anchoredTimestamp: Date.now(), attestationDigest: digest1 });
+    }
+    expect(daemon.previewPrune({ targetAgentIds: [] })).toEqual({
+      scannedCount: 3, prunedCount: 0, retainedCount: 3, prunedEpochs: [],
+    });
+    const filter = { retentionEpochThreshold: 4n };
+    const all = daemon.previewPrune(filter);
+    expect(all).toEqual({
+      scannedCount: 3, prunedCount: 3, retainedCount: 0,
+      prunedEpochs: epochs.map(epoch => ({ agentId: agent1, epoch })),
+    });
+    expect(daemon.prune(filter)).toEqual(all);
+    expect(daemon.previewPrune()).toEqual({ scannedCount: 0, prunedCount: 0, retainedCount: 0, prunedEpochs: [] });
+  });
+
+  it('matches repeated and mixed-case target IDs once per archive entry in archive order', () => {
+    const agents: Hex[] = ['0xcc', '0xbb', '0xaa', '0xcc'];
+    agents.forEach((agentId, index) => daemon.recordAttestation({
+      agentId, epoch: BigInt(index), anchoredTimestamp: Date.now(), attestationDigest: digest1,
+    }));
+    const filter = { targetAgentIds: ['0xAA', '0xCC', '0xcc'] as Hex[], retentionEpochThreshold: 10n };
+    const report = daemon.previewPrune(filter);
+    expect(report.prunedEpochs).toEqual([
+      { agentId: '0xcc', epoch: 0n }, { agentId: '0xaa', epoch: 2n }, { agentId: '0xcc', epoch: 3n },
+    ]);
+    expect(daemon.prune(filter)).toEqual(report);
+    expect(daemon.getRecords().map(entry => entry.agentId)).toEqual(['0xbb']);
+  });
+
   it('filters records by agent correctly', () => {
     daemon.recordAttestation({
       agentId: agent1,

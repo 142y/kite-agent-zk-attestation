@@ -108,36 +108,47 @@ export class AttestationPrunerDaemon {
    * Runs GC cycle based on age, epoch boundaries, and optional agent filters
    */
   public prune(filter: PruningFilter = {}): PruningReport {
+    const retained: EpochArchiveEntry[] = [];
+    const report = this.scanArchive(filter, retained);
+    this.archive = retained;
+    return report;
+  }
+
+  /** Report what prune would remove from the current archive at the current time. */
+  public previewPrune(filter: PruningFilter = {}): PruningReport {
+    return this.scanArchive(filter);
+  }
+
+  private scanArchive(filter: PruningFilter, retained?: EpochArchiveEntry[]): PruningReport {
     const maxAgeMs = filter.maxAgeMs ?? this.defaultMaxAgeMs;
     assertMaxAgeMs(maxAgeMs, 'maxAgeMs');
     const now = Date.now();
     const thresholdEpoch = filter.retentionEpochThreshold;
-    const targetAgents = filter.targetAgentIds?.map((id) => id.toLowerCase());
+    const targetAgents = filter.targetAgentIds
+      ? new Set(filter.targetAgentIds.map(id => id.toLowerCase()))
+      : undefined;
 
-    const retained: EpochArchiveEntry[] = [];
-    const pruned: EpochArchiveEntry[] = [];
+    const prunedEpochs: PruningReport['prunedEpochs'] = [];
 
     for (const item of this.archive) {
-      const matchesAgent = !targetAgents || targetAgents.includes(item.agentId.toLowerCase());
+      const matchesAgent = !targetAgents || targetAgents.has(item.agentId.toLowerCase());
       if (matchesAgent) {
         const isExpiredByAge = now - item.anchoredTimestamp > maxAgeMs;
         const isExpiredByEpoch = thresholdEpoch !== undefined && item.epoch < thresholdEpoch;
 
         if (isExpiredByAge || isExpiredByEpoch) {
-          pruned.push(item);
+          prunedEpochs.push({ agentId: item.agentId, epoch: item.epoch });
           continue;
         }
       }
-      retained.push(item);
+      retained?.push(item);
     }
 
-    this.archive = retained;
-
     return {
-      scannedCount: retained.length + pruned.length,
-      prunedCount: pruned.length,
-      retainedCount: retained.length,
-      prunedEpochs: pruned.map((p) => ({ agentId: p.agentId, epoch: p.epoch })),
+      scannedCount: this.archive.length,
+      prunedCount: prunedEpochs.length,
+      retainedCount: this.archive.length - prunedEpochs.length,
+      prunedEpochs,
     };
   }
 }
