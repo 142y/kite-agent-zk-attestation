@@ -56,7 +56,7 @@ npm run build
 
 ## 📜 Smart Contract Interface
 
-Contract deployed on Kite Testnet (`0x89C57532A1553fbe98A008Fe3960098f9E7C0572`):
+Contract deployed on Kite Testnet (`0x89c57532A1553FBe98a008fe3960098f9E7C0572`):
 
 ```solidity
 function anchorAttestation(
