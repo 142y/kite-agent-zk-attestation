@@ -1,3 +1,6 @@
+/** Largest delay setTimeout supports; larger values fire after ~1ms instead. */
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
+
 export interface RetryOptions {
   maxRetries?: number;
   baseDelayMs?: number;
@@ -36,7 +39,7 @@ export async function executeWithJitterRetry<T>(
       if (attempt > maxRetries || (shouldRetry && !shouldRetry(err, attempt))) {
         throw err;
       }
-      const expDelay = Math.min(maxDelayMs, baseDelayMs * Math.pow(2, attempt));
+      const expDelay = Math.min(maxDelayMs, MAX_TIMER_DELAY_MS, baseDelayMs * Math.pow(2, attempt));
       const jittered = Math.floor(Math.random() * expDelay);
       await new Promise(resolve => setTimeout(resolve, jittered));
     }
