@@ -60,6 +60,9 @@ export class KiteZKAttestationRelay {
     if (typeof config !== 'object' || config === null || Array.isArray(config)) {
       throw new TypeError('Network config must be an object');
     }
+    if (verifyProof !== undefined && typeof verifyProof !== 'function') {
+      throw new TypeError('Proof verifier must be a function when provided');
+    }
     const configSnapshot = { ...config };
     validateNetworkConfig(configSnapshot);
     this.config = configSnapshot;
