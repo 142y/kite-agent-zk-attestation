@@ -50,7 +50,9 @@ export class BatchAttestationPipeline {
     // Tracks the highest epoch observed in this batch per agentId if strict ordering is active
     const batchSeenEpochs = new Map<string, bigint>();
 
-    for (const proof of request.proofs) {
+    // Iterate over a copy taken before the first await, so a caller that drains or refills
+    // its queue while proofs are being verified cannot change which proofs this batch covers.
+    for (const proof of [...request.proofs]) {
       summary.totalProcessed++;
 
       // Strict in-batch monotonicity check
