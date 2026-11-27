@@ -39,7 +39,8 @@ export class AgentStateTree {
   private levels?: Hex[][];
 
   constructor(initialLeaves: Hex[] = []) {
-    initialLeaves.forEach((leaf) => this.validateLeaf(leaf));
+    // forEach 会跳过稀疏槽位；每个输入位置都必须先通过摘要校验。
+    for (const leaf of initialLeaves) this.validateLeaf(leaf);
     this.leaves = [...initialLeaves];
   }
 
