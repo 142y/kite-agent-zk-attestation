@@ -130,4 +130,53 @@ describe('KiteZKAttestationRelay', () => {
     const checked = new KiteZKAttestationRelay(KITE_TESTNET_CONFIG, () => { throw new Error('must not run'); });
     expect((await checked.verifyAttestationProof({ ...validProof, computationEpoch: 2n ** 256n })).valid).toBe(false);
   });
+
+  describe('epoch cache management', () => {
+    const otherAgent = '0x4444444444444444444444444444444444444444444444444444444444444444';
+
+    it('tracks accepted agents without growing for rejected proofs', async () => {
+      expect(relay.knownAgentCount()).toBe(0);
+      expect(relay.lastAcceptedEpoch(validProof.agentId)).toBeNull();
+      await relay.verifyAttestationProof(validProof);
+      expect(relay.knownAgentCount()).toBe(1);
+      expect(relay.lastAcceptedEpoch(validProof.agentId)).toBe(100n);
+      await relay.verifyAttestationProof({ ...validProof, computationEpoch: 99n });
+      expect(relay.knownAgentCount()).toBe(1);
+      expect(relay.lastAcceptedEpoch(validProof.agentId)).toBe(100n);
+    });
+
+    it('forgets a tracked agent and reopens its epoch range', async () => {
+      await relay.verifyAttestationProof(validProof);
+      expect(relay.forgetAgent(validProof.agentId)).toBe(true);
+      expect(relay.knownAgentCount()).toBe(0);
+      expect(relay.lastAcceptedEpoch(validProof.agentId)).toBeNull();
+      const replayed = await relay.verifyAttestationProof(validProof);
+      expect(replayed.valid).toBe(true);
+    });
+
+    it('returns false when forgetting an untracked agent', () => {
+      expect(relay.forgetAgent(otherAgent)).toBe(false);
+      expect(relay.knownAgentCount()).toBe(0);
+    });
+
+    it('clears every tracked agent at once', async () => {
+      await relay.verifyAttestationProof(validProof);
+      await relay.verifyAttestationProof({
+        ...validProof,
+        agentId: otherAgent,
+        x402ReceiptHash: '0x5555555555555555555555555555555555555555555555555555555555555555',
+      });
+      expect(relay.knownAgentCount()).toBe(2);
+      relay.clearKnownEpochs();
+      expect(relay.knownAgentCount()).toBe(0);
+      expect(relay.lastAcceptedEpoch(validProof.agentId)).toBeNull();
+      expect(relay.lastAcceptedEpoch(otherAgent)).toBeNull();
+    });
+
+    it('rejects malformed agent IDs on cache reads and writes', () => {
+      expect(() => relay.lastAcceptedEpoch('0x1234')).toThrow('32-byte hex string');
+      expect(() => relay.forgetAgent('not-hex')).toThrow('32-byte hex string');
+      expect(relay.knownAgentCount()).toBe(0);
+    });
+  });
 });
