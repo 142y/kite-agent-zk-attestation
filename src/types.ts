@@ -12,8 +12,8 @@ export const AgentExecutionProofSchema = z.object({
   x402ReceiptHash: z.string().refine((val): val is Hex => isHex(val) && val.length === 66, {
     message: 'x402ReceiptHash must be a 32-byte hex string (0x...)',
   }),
-  zkProof: z.string().refine((val): val is Hex => isHex(val), {
-    message: 'zkProof must be a valid hex string',
+  zkProof: z.string().refine((val): val is Hex => isHex(val) && /^0x(?:[0-9a-fA-F]{2})+$/.test(val), {
+    message: 'zkProof must be a non-empty hex string of whole bytes',
   }),
   timestamp: z.number().int().positive().optional(),
 });
