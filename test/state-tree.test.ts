@@ -45,6 +45,22 @@ describe('AgentStateTree', () => {
     expect(new AgentStateTree([a, b]).getRoot()).not.toBe(b);
   });
 
+  it('exposes a snapshot of committed leaves that callers cannot mutate', () => {
+    const leafA = ('0x' + '11'.repeat(32)) as Hex;
+    const leafB = ('0x' + '22'.repeat(32)) as Hex;
+    const tree = new AgentStateTree([leafA]);
+    tree.insertActionLeaf(leafB);
+
+    const snapshot = tree.getLeaves();
+    expect(snapshot).toEqual([leafA, leafB]);
+
+    (snapshot as Hex[]).push(('0x' + '33'.repeat(32)) as Hex);
+    (snapshot as Hex[])[0] = ('0x' + 'ff'.repeat(32)) as Hex;
+    expect(tree.getLeafCount()).toBe(2);
+    expect(tree.getLeaves()).toEqual([leafA, leafB]);
+    expect(tree.getRoot()).toBe(new AgentStateTree([leafA, leafB]).getRoot());
+  });
+
   it('rejects malformed leaves at construction and insertion', () => {
     for (const leaf of ['0x12', 'not-hex', '0x' + 'gg'.repeat(32)]) {
       expect(() => new AgentStateTree([leaf as Hex])).toThrow('32-byte');
@@ -68,6 +84,36 @@ describe('action inclusion paths', () => {
       }
     });
   }
+
+  it('rebuilds proofs after appends and isolates previously returned paths', () => {
+    const tree = new AgentStateTree();
+    for (const [index, leaf] of leaves.entries()) {
+      tree.insertActionLeaf(leaf);
+      const root = new AgentStateTree(leaves.slice(0, index + 1)).getRoot();
+      expect(tree.getRoot()).toBe(root);
+      for (let i = 0; i <= index; i++) {
+        const path = tree.getInclusionPath(i);
+        expect(verifyInclusionPath(leaves[i], path, root)).toBe(true);
+        if (path.length) path[0].hash = '0x';
+        expect(verifyInclusionPath(leaves[i], tree.getInclusionPath(i), root)).toBe(true);
+      }
+    }
+  });
+
+  it('matches full rebuilds across tree growth and multiple appends between reads', () => {
+    const actions = Array.from({ length: 34 }, (_, i) => ('0x' + i.toString(16).padStart(64, '0')) as Hex);
+    const tree = new AgentStateTree(actions.slice(0, 3));
+    tree.getRoot();
+    for (let i = 3; i < actions.length; i++) {
+      tree.insertActionLeaf(actions[i]);
+      if (i % 3 !== 0) continue;
+      const fresh = new AgentStateTree(actions.slice(0, i + 1));
+      expect(tree.getRoot()).toBe(fresh.getRoot());
+      for (let j = 0; j <= i; j++) {
+        expect(tree.getInclusionPath(j)).toEqual(fresh.getInclusionPath(j));
+      }
+    }
+  });
 
   it('rejects indices without an existing leaf', () => {
     const tree = new AgentStateTree(leaves);

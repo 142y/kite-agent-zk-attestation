@@ -36,26 +36,49 @@ export function verifyInclusionPath(action: Hex, path: readonly MerkleStep[], ro
  */
 export class AgentStateTree {
   private leaves: Hex[] = [];
+  private levels?: Hex[][];
 
   constructor(initialLeaves: Hex[] = []) {
-    initialLeaves.forEach((leaf) => this.validateLeaf(leaf));
+    // forEach 会跳过稀疏槽位；每个输入位置都必须先通过摘要校验。
+    for (const leaf of initialLeaves) this.validateLeaf(leaf);
     this.leaves = [...initialLeaves];
   }
 
   public insertActionLeaf(actionHash: Hex): void {
     this.validateLeaf(actionHash);
     this.leaves.push(actionHash);
+    if (!this.levels) return;
+
+    // An append can only change the rightmost node of each existing level.
+    let level = this.levels[0];
+    level.push(hashLeaf(actionHash));
+    for (let depth = 1; level.length > 1; depth++) {
+      const last = level.length - 1;
+      const parent = last % 2 === 0 ? level[last] : hashPair(level[last - 1], level[last]);
+      const parents = this.levels[depth] ??= [];
+      parents[Math.floor(last / 2)] = parent;
+      level = parents;
+    }
   }
 
   public getLeafCount(): number {
     return this.leaves.length;
   }
 
+  /**
+   * Returns a snapshot copy of the currently committed action leaves in insertion order.
+   * Callers can mutate the returned array without affecting the tree.
+   */
+  public getLeaves(): readonly Hex[] {
+    return [...this.leaves];
+  }
+
   public getRoot(): Hex {
     if (this.leaves.length === 0) {
       return ('0x' + '0'.repeat(64)) as Hex;
     }
-    return this.reduceTree();
+    const levels = this.getLevels();
+    return levels[levels.length - 1][0];
   }
 
   /** Sibling hashes ordered from the leaf toward the root. */
@@ -64,22 +87,22 @@ export class AgentStateTree {
       throw new RangeError('Leaf index outside the state tree');
     }
     const steps: MerkleStep[] = [];
-    this.reduceTree({ index, steps });
+    for (const level of this.getLevels()) {
+      const isRight = index % 2 === 1;
+      const sibling = isRight ? index - 1 : index + 1;
+      if (sibling < level.length) {
+        steps.push({ hash: level[sibling], position: isRight ? 'left' : 'right' });
+      }
+      index = Math.floor(index / 2);
+    }
     return steps;
   }
 
-  private reduceTree(path?: { index: number; steps: MerkleStep[] }): Hex {
+  private getLevels(): Hex[][] {
+    if (this.levels) return this.levels;
     let currentLevel = this.leaves.map(hashLeaf);
-
+    const levels = [currentLevel];
     while (currentLevel.length > 1) {
-      if (path) {
-        const isRight = path.index % 2 === 1;
-        const sibling = isRight ? path.index - 1 : path.index + 1;
-        if (sibling < currentLevel.length) {
-          path.steps.push({ hash: currentLevel[sibling], position: isRight ? 'left' : 'right' });
-        }
-        path.index = Math.floor(path.index / 2);
-      }
       const nextLevel: Hex[] = [];
       for (let i = 0; i < currentLevel.length; i += 2) {
         if (i + 1 < currentLevel.length) {
@@ -88,10 +111,12 @@ export class AgentStateTree {
           nextLevel.push(currentLevel[i]);
         }
       }
+      levels.push(nextLevel);
       currentLevel = nextLevel;
     }
 
-    return currentLevel[0];
+    this.levels = levels;
+    return levels;
   }
 
   private validateLeaf(leaf: Hex): void {

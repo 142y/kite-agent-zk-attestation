@@ -5,6 +5,8 @@ import {
   toHex,
   pad,
   zeroHash,
+  isAddress,
+  zeroAddress,
 } from 'viem';
 import {
   AgentExecutionProof,
@@ -21,14 +23,18 @@ export type AttestationProofVerifier = (
 ) => boolean | Promise<boolean>;
 
 function validateNetworkConfig(config: KiteNetworkConfig): void {
-  if (!config.name.trim()) {
+  if (typeof config.name !== 'string' || !config.name.trim()) {
     throw new Error('Network name must not be empty');
   }
   if (!Number.isSafeInteger(config.chainId) || config.chainId <= 0) {
     throw new Error('Network chain ID must be a positive safe integer');
   }
-  if (!/^0x[0-9a-fA-F]{40}$/.test(config.contractAddress)) {
-    throw new Error('Network contract address must be a 20-byte hex address');
+  // Strict mode: lowercase/uppercase addresses pass, mixed-case must carry a valid EIP-55 checksum.
+  if (typeof config.contractAddress !== 'string' || !isAddress(config.contractAddress, { strict: true })) {
+    throw new Error('Network contract address must be a 20-byte hex address with a valid EIP-55 checksum');
+  }
+  if (config.contractAddress.toLowerCase() === zeroAddress) {
+    throw new Error('Network contract address must not be the zero address');
   }
   for (const [field, value] of [['RPC', config.rpcUrl], ['Facilitator', config.facilitatorUrl]] as const) {
     let url: URL;
@@ -51,19 +57,30 @@ export class KiteZKAttestationRelay {
     config: KiteNetworkConfig = KITE_TESTNET_CONFIG,
     private readonly verifyProof?: AttestationProofVerifier
   ) {
+    if (typeof config !== 'object' || config === null || Array.isArray(config)) {
+      throw new TypeError('Network config must be an object');
+    }
     const configSnapshot = { ...config };
     validateNetworkConfig(configSnapshot);
     this.config = configSnapshot;
   }
 
   /**
-   * Computes the deterministic keccak256 attestation digest
+   * Computes the deterministic keccak256 attestation digest.
+   * Validates the proof shape first so malformed inputs fail with a clear message
+   * instead of propagating low-level ABI encoding errors.
    */
   public computeAttestationDigest(proof: AgentExecutionProof): Hex {
+    const parseResult = AgentExecutionProofSchema.safeParse(proof);
+    if (!parseResult.success) {
+      const issues = parseResult.error.issues.map((i) => i.message).join(', ');
+      throw new Error(`Invalid attestation proof: ${issues}`);
+    }
+    const validated = parseResult.data;
     return keccak256(
       encodePacked(
         ['bytes32', 'bytes32', 'uint256', 'bytes32'],
-        [proof.agentId, proof.stateHash, proof.computationEpoch, proof.x402ReceiptHash]
+        [validated.agentId, validated.stateHash, validated.computationEpoch, validated.x402ReceiptHash]
       )
     );
   }
@@ -83,11 +100,16 @@ export class KiteZKAttestationRelay {
         attestationDigest: zeroHash,
         epoch: 0n,
         agentId: zeroHash,
-        rejectionReason: `Schema validation failed: ${parseResult.error.issues.map(i => i.message).join(', ')}`,
+        // Zod type errors such as "Required" do not say which field failed, so prefix the path.
+        rejectionReason: `Schema validation failed: ${parseResult.error.issues.map(({ path, message }) => {
+          const field = path.join('.') || 'proof';
+          return message.startsWith(`${field} `) ? message : `${field}: ${message}`;
+        }).join(', ')}`,
       };
     }
 
-    const proof = parseResult.data;
+    // 验证器只能消费固定输入，不能改写已计算摘要所对应的证明与 epoch。
+    const proof = Object.freeze(parseResult.data);
     const digest = this.computeAttestationDigest(proof);
     const lastEpoch = this.knownEpochs.get(proof.agentId.toLowerCase()) ?? 0n;
 
@@ -116,7 +138,7 @@ export class KiteZKAttestationRelay {
         agentId: proof.agentId, rejectionReason: 'No proof verifier configured' };
     }
     try {
-      if (await this.verifyProof(proof, this.generateVerifierPublicInputs(proof)) !== true) {
+      if (await this.verifyProof(proof, Object.freeze(this.generateVerifierPublicInputs(proof))) !== true) {
         return { valid: false, attestationDigest: digest, epoch: proof.computationEpoch,
           agentId: proof.agentId, rejectionReason: 'Proof verification failed' };
       }
@@ -156,5 +178,36 @@ export class KiteZKAttestationRelay {
 
   public getNetworkConfig(): KiteNetworkConfig {
     return { ...this.config };
+  }
+
+  /** Number of agents currently tracked in the epoch cache. */
+  public knownAgentCount(): number {
+    return this.knownEpochs.size;
+  }
+
+  /** Highest accepted epoch registered for an agent, or null when untracked. */
+  public lastAcceptedEpoch(agentId: Hex): bigint | null {
+    if (!/^0x[0-9a-fA-F]{64}$/.test(agentId)) {
+      throw new Error('agentId must be a 32-byte hex string');
+    }
+    const epoch = this.knownEpochs.get(agentId.toLowerCase());
+    return epoch === undefined ? null : epoch;
+  }
+
+  /**
+   * Removes an agent from the epoch cache so its operator can retire or re-register it.
+   * Returns true when the agent was tracked. Callers must re-attest from a fresh epoch,
+   * since forgetting an agent reopens its replay window.
+   */
+  public forgetAgent(agentId: Hex): boolean {
+    if (!/^0x[0-9a-fA-F]{64}$/.test(agentId)) {
+      throw new Error('agentId must be a 32-byte hex string');
+    }
+    return this.knownEpochs.delete(agentId.toLowerCase());
+  }
+
+  /** Drops every tracked agent from the epoch cache. */
+  public clearKnownEpochs(): void {
+    this.knownEpochs.clear();
   }
 }
