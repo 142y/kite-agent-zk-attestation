@@ -57,3 +57,20 @@ describe('KiteZKAttestationRelay config shape validation', () => {
     expect(() => new KiteZKAttestationRelay(KITE_MAINNET_CONFIG)).not.toThrow();
   });
 });
+
+describe('Kite network config immutability', () => {
+  it.each([KITE_TESTNET_CONFIG, KITE_MAINNET_CONFIG])('$name default config cannot be mutated', (config) => {
+    expect(Object.isFrozen(config)).toBe(true);
+    const original = config.rpcUrl;
+    expect(() => {
+      (config as { rpcUrl: string }).rpcUrl = 'https://evil.example';
+    }).toThrow(TypeError);
+    expect(config.rpcUrl).toBe(original);
+  });
+
+  it('relays built from defaults still expose a mutable copy', () => {
+    const copy = new KiteZKAttestationRelay().getNetworkConfig();
+    copy.rpcUrl = 'https://other.example';
+    expect(new KiteZKAttestationRelay().getNetworkConfig().rpcUrl).toBe(KITE_TESTNET_CONFIG.rpcUrl);
+  });
+});
