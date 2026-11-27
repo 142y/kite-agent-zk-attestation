@@ -69,6 +69,36 @@ describe('action inclusion paths', () => {
     });
   }
 
+  it('rebuilds proofs after appends and isolates previously returned paths', () => {
+    const tree = new AgentStateTree();
+    for (const [index, leaf] of leaves.entries()) {
+      tree.insertActionLeaf(leaf);
+      const root = new AgentStateTree(leaves.slice(0, index + 1)).getRoot();
+      expect(tree.getRoot()).toBe(root);
+      for (let i = 0; i <= index; i++) {
+        const path = tree.getInclusionPath(i);
+        expect(verifyInclusionPath(leaves[i], path, root)).toBe(true);
+        if (path.length) path[0].hash = '0x';
+        expect(verifyInclusionPath(leaves[i], tree.getInclusionPath(i), root)).toBe(true);
+      }
+    }
+  });
+
+  it('matches full rebuilds across tree growth and multiple appends between reads', () => {
+    const actions = Array.from({ length: 34 }, (_, i) => ('0x' + i.toString(16).padStart(64, '0')) as Hex);
+    const tree = new AgentStateTree(actions.slice(0, 3));
+    tree.getRoot();
+    for (let i = 3; i < actions.length; i++) {
+      tree.insertActionLeaf(actions[i]);
+      if (i % 3 !== 0) continue;
+      const fresh = new AgentStateTree(actions.slice(0, i + 1));
+      expect(tree.getRoot()).toBe(fresh.getRoot());
+      for (let j = 0; j <= i; j++) {
+        expect(tree.getInclusionPath(j)).toEqual(fresh.getInclusionPath(j));
+      }
+    }
+  });
+
   it('rejects indices without an existing leaf', () => {
     const tree = new AgentStateTree(leaves);
     for (const index of [-1, 0.5, NaN, Infinity, leaves.length]) {
