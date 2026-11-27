@@ -47,7 +47,6 @@ describe('executeWithJitterRetry', () => {
     await expect(executeWithJitterRetry(operation, options)).rejects.toThrow(field);
     expect(operation).not.toHaveBeenCalled();
   });
-
   it('rejects a non-function operation immediately instead of retrying it', async () => {
     const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
     try {
@@ -78,5 +77,23 @@ describe('executeWithJitterRetry', () => {
     } finally {
       setTimeoutSpy.mockRestore();
     }
+  });
+
+  it('rethrows the operation error when shouldRetry itself throws', async () => {
+    const failure = new Error('operation failed');
+    const operation = vi.fn().mockRejectedValue(failure);
+    const shouldRetry = vi.fn(() => { throw new Error('predicate bug'); });
+    await expect(executeWithJitterRetry(operation, {
+      baseDelayMs: 0, maxDelayMs: 0, shouldRetry,
+    })).rejects.toBe(failure);
+    expect(operation).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['yes', true, 1, {}])('rejects a non-function shouldRetry (%s) before running the operation', async (shouldRetry) => {
+    const operation = vi.fn().mockRejectedValue(new Error('original failure'));
+    await expect(executeWithJitterRetry(operation, {
+      baseDelayMs: 0, maxDelayMs: 0, shouldRetry: shouldRetry as never,
+    })).rejects.toThrow(TypeError);
+    expect(operation).not.toHaveBeenCalled();
   });
 });

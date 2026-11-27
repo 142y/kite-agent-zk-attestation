@@ -1,3 +1,6 @@
+/** Largest delay setTimeout supports; larger values fire after ~1ms instead. */
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
+
 export interface RetryOptions {
   maxRetries?: number;
   baseDelayMs?: number;
@@ -25,6 +28,10 @@ export async function executeWithJitterRetry<T>(
     throw new RangeError('maxDelayMs must be a non-negative finite number');
   }
 
+  if (shouldRetry !== undefined && typeof shouldRetry !== 'function') {
+    throw new TypeError('shouldRetry must be a function');
+  }
+
   let attempt = 0;
 
   while (true) {
@@ -32,12 +39,20 @@ export async function executeWithJitterRetry<T>(
       return await operation();
     } catch (err) {
       attempt++;
-      if (attempt > maxRetries || (shouldRetry && !shouldRetry(err, attempt))) {
-        throw err;
+      if (attempt > maxRetries) throw err;
+      if (shouldRetry) {
+        let retry: boolean;
+        try {
+          retry = shouldRetry(err, attempt);
+        } catch {
+          // A faulty predicate must not mask the operation's own failure.
+          throw err;
+        }
+        if (!retry) throw err;
       }
       // Cap the exponent: 2 ** attempt overflows to Infinity past 1023, and
       // 0 * Infinity would otherwise produce a NaN delay.
-      const expDelay = Math.min(maxDelayMs, baseDelayMs * Math.pow(2, Math.min(attempt, 52)));
+      const expDelay = Math.min(maxDelayMs, MAX_TIMER_DELAY_MS, baseDelayMs * Math.pow(2, Math.min(attempt, 52)));
       const jittered = Math.floor(Math.random() * expDelay);
       await new Promise(resolve => setTimeout(resolve, jittered));
     }
