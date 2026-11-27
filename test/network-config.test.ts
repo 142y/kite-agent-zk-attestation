@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { getAddress, isAddress } from 'viem';
+import { KiteZKAttestationRelay } from '../src/attestation.js';
 import { KITE_MAINNET_CONFIG, KITE_TESTNET_CONFIG } from '../src/types.js';
 import { KiteZKAttestationRelay } from '../src/attestation.js';
 
@@ -38,5 +39,21 @@ describe('Kite network configs', () => {
       expect(() => new KiteZKAttestationRelay({ ...KITE_TESTNET_CONFIG, name: 5 as unknown as string }))
         .toThrow('Network name must not be empty');
     });
+  });
+});
+
+describe('KiteZKAttestationRelay config shape validation', () => {
+  it.each([null, 42, 'config', []])('rejects non-object config %j with a TypeError', (bad) => {
+    expect(() => new KiteZKAttestationRelay(bad as never)).toThrow(/Network config must be an object/);
+  });
+
+  it.each([undefined, 123, null, {}])('rejects non-string or empty network name %j', (name) => {
+    expect(() => new KiteZKAttestationRelay({ ...KITE_TESTNET_CONFIG, name } as never))
+      .toThrow(/Network name must not be empty/);
+  });
+
+  it('still accepts the shipped configs', () => {
+    expect(() => new KiteZKAttestationRelay(KITE_TESTNET_CONFIG)).not.toThrow();
+    expect(() => new KiteZKAttestationRelay(KITE_MAINNET_CONFIG)).not.toThrow();
   });
 });

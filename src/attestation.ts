@@ -57,6 +57,9 @@ export class KiteZKAttestationRelay {
     config: KiteNetworkConfig = KITE_TESTNET_CONFIG,
     private readonly verifyProof?: AttestationProofVerifier
   ) {
+    if (typeof config !== 'object' || config === null || Array.isArray(config)) {
+      throw new TypeError('Network config must be an object');
+    }
     const configSnapshot = { ...config };
     validateNetworkConfig(configSnapshot);
     this.config = configSnapshot;
