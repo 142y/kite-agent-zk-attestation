@@ -40,10 +40,19 @@ export class BatchAttestationPipeline {
   private relay: KiteZKAttestationRelay;
 
   constructor(relay: KiteZKAttestationRelay) {
+    if (typeof relay?.verifyAttestationProof !== "function") {
+      throw new TypeError("relay must provide a verifyAttestationProof function");
+    }
     this.relay = relay;
   }
 
   public async processBatch(request: BatchAnchorRequest): Promise<BatchAnchorSummary> {
+    // Reject non-array input up front: iterating a string or Set would otherwise be
+    // reported as a batch of bogus per-character/per-item rejections.
+    if (!Array.isArray(request?.proofs)) {
+      throw new TypeError("request.proofs must be an array of attestation proofs");
+    }
+
     const summary: BatchAnchorSummary = {
       totalProcessed: 0,
       acceptedCount: 0,
@@ -59,7 +68,9 @@ export class BatchAttestationPipeline {
     // Tracks the highest epoch observed in this batch per agentId if strict ordering is active
     const batchSeenEpochs = new Map<string, bigint>();
 
-    for (const proof of request.proofs) {
+    // Iterate over a copy taken before the first await, so a caller that drains or refills
+    // its queue while proofs are being verified cannot change which proofs this batch covers.
+    for (const proof of [...request.proofs]) {
       summary.totalProcessed++;
 
       // Strict in-batch monotonicity check
@@ -84,6 +95,7 @@ export class BatchAttestationPipeline {
           }
           continue;
         }
+        batchSeenEpochs.set(proof.agentId.toLowerCase(), proof.computationEpoch);
       }
 
       const res = await this.relay.verifyAttestationProof(proof);
