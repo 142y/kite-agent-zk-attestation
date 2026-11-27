@@ -36,8 +36,16 @@ export async function executeWithJitterRetry<T>(
       return await operation();
     } catch (err) {
       attempt++;
-      if (attempt > maxRetries || (shouldRetry && !shouldRetry(err, attempt))) {
-        throw err;
+      if (attempt > maxRetries) throw err;
+      if (shouldRetry) {
+        let retry: boolean;
+        try {
+          retry = shouldRetry(err, attempt);
+        } catch {
+          // A faulty predicate must not mask the operation's own failure.
+          throw err;
+        }
+        if (!retry) throw err;
       }
       const expDelay = Math.min(maxDelayMs, MAX_TIMER_DELAY_MS, baseDelayMs * Math.pow(2, attempt));
       const jittered = Math.floor(Math.random() * expDelay);
