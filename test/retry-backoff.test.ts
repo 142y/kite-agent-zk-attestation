@@ -47,4 +47,53 @@ describe('executeWithJitterRetry', () => {
     await expect(executeWithJitterRetry(operation, options)).rejects.toThrow(field);
     expect(operation).not.toHaveBeenCalled();
   });
+  it('rejects a non-function operation immediately instead of retrying it', async () => {
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+    try {
+      await expect(
+        executeWithJitterRetry(undefined as never, { maxRetries: 3, baseDelayMs: 10, maxDelayMs: 10 })
+      ).rejects.toThrow('operation must be a function');
+      expect(setTimeoutSpy).not.toHaveBeenCalled();
+    } finally {
+      setTimeoutSpy.mockRestore();
+    }
+  });
+
+  it('never schedules a NaN delay when the exponent overflows', async () => {
+    const delays: unknown[] = [];
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number) => {
+      delays.push(ms);
+      fn();
+      return 0 as unknown as ReturnType<typeof setTimeout>;
+    }) as typeof setTimeout);
+    try {
+      await expect(
+        executeWithJitterRetry(async () => { throw new Error('down'); }, {
+          maxRetries: 1100, baseDelayMs: 0, maxDelayMs: 10,
+        })
+      ).rejects.toThrow('down');
+      expect(delays).toHaveLength(1100);
+      expect(delays.every((d) => Number.isFinite(d as number))).toBe(true);
+    } finally {
+      setTimeoutSpy.mockRestore();
+    }
+  });
+
+  it('rethrows the operation error when shouldRetry itself throws', async () => {
+    const failure = new Error('operation failed');
+    const operation = vi.fn().mockRejectedValue(failure);
+    const shouldRetry = vi.fn(() => { throw new Error('predicate bug'); });
+    await expect(executeWithJitterRetry(operation, {
+      baseDelayMs: 0, maxDelayMs: 0, shouldRetry,
+    })).rejects.toBe(failure);
+    expect(operation).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['yes', true, 1, {}])('rejects a non-function shouldRetry (%s) before running the operation', async (shouldRetry) => {
+    const operation = vi.fn().mockRejectedValue(new Error('original failure'));
+    await expect(executeWithJitterRetry(operation, {
+      baseDelayMs: 0, maxDelayMs: 0, shouldRetry: shouldRetry as never,
+    })).rejects.toThrow(TypeError);
+    expect(operation).not.toHaveBeenCalled();
+  });
 });

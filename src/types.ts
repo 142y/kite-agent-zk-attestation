@@ -12,8 +12,8 @@ export const AgentExecutionProofSchema = z.object({
   x402ReceiptHash: z.string().refine((val): val is Hex => isHex(val) && val.length === 66, {
     message: 'x402ReceiptHash must be a 32-byte hex string (0x...)',
   }),
-  zkProof: z.string().refine((val): val is Hex => isHex(val), {
-    message: 'zkProof must be a valid hex string',
+  zkProof: z.string().refine((val): val is Hex => isHex(val) && /^0x(?:[0-9a-fA-F]{2})+$/.test(val), {
+    message: 'zkProof must be a non-empty hex string of whole bytes',
   }),
   timestamp: z.number().int().positive().optional(),
 });
@@ -36,18 +36,22 @@ export interface KiteNetworkConfig {
   facilitatorUrl: string;
 }
 
-export const KITE_TESTNET_CONFIG: KiteNetworkConfig = {
+/**
+ * Shipped defaults are frozen: relays fall back to these objects, so a mutation
+ * by one caller would otherwise silently redirect every later default relay.
+ */
+export const KITE_TESTNET_CONFIG: Readonly<KiteNetworkConfig> = Object.freeze({
   name: 'Kite Testnet',
   chainId: 2368,
   rpcUrl: 'https://rpc-testnet.gokite.ai',
   contractAddress: '0x89c57532A1553FBe98a008fe3960098f9E7C0572',
   facilitatorUrl: 'https://facilitator-testnet.gokite.ai',
-};
+});
 
-export const KITE_MAINNET_CONFIG: KiteNetworkConfig = {
+export const KITE_MAINNET_CONFIG: Readonly<KiteNetworkConfig> = Object.freeze({
   name: 'Kite Mainnet',
   chainId: 2366,
   rpcUrl: 'https://rpc.gokite.ai',
   contractAddress: '0x2A1553fbe98a008fe3960098f9e7c057289C5753',
   facilitatorUrl: 'https://facilitator.gokite.ai',
-};
+});
