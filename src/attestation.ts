@@ -96,7 +96,8 @@ export class KiteZKAttestationRelay {
       };
     }
 
-    const proof = parseResult.data;
+    // 验证器只能消费固定输入，不能改写已计算摘要所对应的证明与 epoch。
+    const proof = Object.freeze(parseResult.data);
     const digest = this.computeAttestationDigest(proof);
     const lastEpoch = this.knownEpochs.get(proof.agentId.toLowerCase()) ?? 0n;
 
@@ -125,7 +126,7 @@ export class KiteZKAttestationRelay {
         agentId: proof.agentId, rejectionReason: 'No proof verifier configured' };
     }
     try {
-      if (await this.verifyProof(proof, this.generateVerifierPublicInputs(proof)) !== true) {
+      if (await this.verifyProof(proof, Object.freeze(this.generateVerifierPublicInputs(proof))) !== true) {
         return { valid: false, attestationDigest: digest, epoch: proof.computationEpoch,
           agentId: proof.agentId, rejectionReason: 'Proof verification failed' };
       }
