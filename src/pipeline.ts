@@ -53,6 +53,8 @@ export class BatchAttestationPipeline {
       throw new TypeError("request.proofs must be an array of attestation proofs");
     }
 
+    // 批次开始后策略固定，异步验证期间调用方修改请求不能改变本次处理规则。
+    const { strictEpochOrdering, stopOnFirstRejection } = request;
     const summary: BatchAnchorSummary = {
       totalProcessed: 0,
       acceptedCount: 0,
@@ -77,7 +79,7 @@ export class BatchAttestationPipeline {
       // Malformed entries skip this check and are rejected by the relay's schema validation
       // instead of crashing the whole batch.
       if (
-        request.strictEpochOrdering &&
+        strictEpochOrdering &&
         typeof proof?.agentId === "string" &&
         typeof proof.computationEpoch === "bigint"
       ) {
@@ -90,7 +92,7 @@ export class BatchAttestationPipeline {
             reason: `Strict ordering violation: epoch ${proof.computationEpoch} is not strictly greater than previous batch epoch ${lastSeen}`,
           });
 
-          if (request.stopOnFirstRejection) {
+          if (stopOnFirstRejection) {
             break;
           }
           continue;
@@ -116,7 +118,7 @@ export class BatchAttestationPipeline {
           reason: res.rejectionReason ?? "Unknown validation failure",
         });
 
-        if (request.stopOnFirstRejection) {
+        if (stopOnFirstRejection) {
           break;
         }
       }
