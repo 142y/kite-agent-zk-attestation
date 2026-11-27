@@ -66,13 +66,21 @@ export class KiteZKAttestationRelay {
   }
 
   /**
-   * Computes the deterministic keccak256 attestation digest
+   * Computes the deterministic keccak256 attestation digest.
+   * Validates the proof shape first so malformed inputs fail with a clear message
+   * instead of propagating low-level ABI encoding errors.
    */
   public computeAttestationDigest(proof: AgentExecutionProof): Hex {
+    const parseResult = AgentExecutionProofSchema.safeParse(proof);
+    if (!parseResult.success) {
+      const issues = parseResult.error.issues.map((i) => i.message).join(', ');
+      throw new Error(`Invalid attestation proof: ${issues}`);
+    }
+    const validated = parseResult.data;
     return keccak256(
       encodePacked(
         ['bytes32', 'bytes32', 'uint256', 'bytes32'],
-        [proof.agentId, proof.stateHash, proof.computationEpoch, proof.x402ReceiptHash]
+        [validated.agentId, validated.stateHash, validated.computationEpoch, validated.x402ReceiptHash]
       )
     );
   }

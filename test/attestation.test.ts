@@ -26,6 +26,17 @@ describe('KiteZKAttestationRelay', () => {
     expect(digest1.length).toBe(66);
   });
 
+  it('rejects malformed proofs when computing digest with a clear error', () => {
+    const missing = { ...validProof, agentId: 'not-hex' } as unknown as AgentExecutionProof;
+    expect(() => relay.computeAttestationDigest(missing)).toThrow('Invalid attestation proof');
+
+    const short = { ...validProof, stateHash: '0x1234' } as unknown as AgentExecutionProof;
+    expect(() => relay.computeAttestationDigest(short)).toThrow('Invalid attestation proof');
+
+    const badEpoch = { ...validProof, computationEpoch: 0n } as unknown as AgentExecutionProof;
+    expect(() => relay.computeAttestationDigest(badEpoch)).toThrow('Invalid attestation proof');
+  });
+
   it('successfully verifies and anchors valid execution proof', async () => {
     const res = await relay.verifyAttestationProof(validProof);
     expect(res.valid).toBe(true);
