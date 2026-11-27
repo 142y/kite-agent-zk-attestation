@@ -74,10 +74,17 @@ export class AttestationPrunerDaemon {
 
     // Enforce high-watermark capacity if set
     if (this.maxRetainedCapacity !== undefined && this.archive.length > this.maxRetainedCapacity) {
-      // Sort ascending by epoch and drop oldest
-      this.archive.sort((a, b) => (a.epoch < b.epoch ? -1 : a.epoch > b.epoch ? 1 : 0));
       while (this.archive.length > this.maxRetainedCapacity) {
-        this.archive.shift();
+        // Epochs are only ordered within one agent, so they cannot determine
+        // which record is oldest across the whole archive. On timestamp ties,
+        // retaining the first index preserves FIFO insertion order.
+        let oldestIndex = 0;
+        for (let i = 1; i < this.archive.length; i++) {
+          if (this.archive[i].anchoredTimestamp < this.archive[oldestIndex].anchoredTimestamp) {
+            oldestIndex = i;
+          }
+        }
+        this.archive.splice(oldestIndex, 1);
       }
     }
   }
