@@ -32,6 +32,12 @@ function checkedProof(raw: AgentExecutionProof): AgentExecutionProof {
   return proof;
 }
 
+function assertProofArray(proofs: unknown): asserts proofs is AgentExecutionProof[] {
+  if (!Array.isArray(proofs)) {
+    throw new TypeError('proofs must be an array of AgentExecutionProof');
+  }
+}
+
 /**
  * Builds ordered batch commitments. This does not prove execution, verify a
  * proof, compress proofs, or construct a recursive SNARK.
@@ -42,12 +48,14 @@ export class SnarkRecursionOptimizer {
 
   /** No compression is performed; byte counts therefore remain equal. */
   public evaluateCompression(proofs: AgentExecutionProof[]): ProofCompressionMetrics {
+    assertProofArray(proofs);
     const originalByteLength = proofs.reduce((total, proof) => total + (checkedProof(proof).zkProof.length - 2) / 2, 0);
     return { originalByteLength, compressedByteLength: originalByteLength, compressionRatio: 1, foldedRecursionDepth: 0 };
   }
 
   /** Commits complete proof bytes and public inputs, preserving batch order and duplicates. */
   public commitProofs(proofs: AgentExecutionProof[]): ProofBatchCommitment {
+    assertProofArray(proofs);
     if (proofs.length === 0) throw new Error('Cannot fold an empty proof set');
     const proofDigests = proofs.map(raw => {
       const proof = checkedProof(raw);
