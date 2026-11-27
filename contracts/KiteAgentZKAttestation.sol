@@ -56,6 +56,8 @@ contract KiteAgentZKAttestation {
     error AttestationAlreadyExists(bytes32 digest);
     error Unauthorized();
     error InvalidVerifier(address verifierAddress);
+    error EmptyAgentId();
+    error EmptyStateHash();
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert Unauthorized();
@@ -67,6 +69,9 @@ contract KiteAgentZKAttestation {
         owner = msg.sender;
         verifier = IKiteVerifier(_verifier);
         chainId = block.chainid;
+        // Log the initial configuration so indexers can rebuild it from events alone.
+        emit OwnershipTransferred(address(0), msg.sender);
+        emit VerifierUpdated(address(0), _verifier);
     }
 
     /**
@@ -95,6 +100,8 @@ contract KiteAgentZKAttestation {
 
     /**
      * @notice Submits and verifies a zero-knowledge attestation of autonomous agent execution.
+     * @dev Zero agentId and stateHash are reserved sentinels (rejected result / empty state tree)
+     *      and are never anchored, whatever the verifier would accept.
      * @param agentId Unique identifier of the Kite Autonomous Agent
      * @param stateHash Merkle root or digest representing internal agent memory/state
      * @param computationEpoch Monotonically increasing epoch sequence
@@ -108,6 +115,9 @@ contract KiteAgentZKAttestation {
         bytes32 x402ReceiptHash,
         bytes calldata zkProof
     ) external returns (bytes32 attestationHash) {
+        if (agentId == bytes32(0)) revert EmptyAgentId();
+        if (stateHash == bytes32(0)) revert EmptyStateHash();
+
         if (computationEpoch <= agentLatestEpoch[agentId]) {
             revert StaleComputationEpoch(computationEpoch, agentLatestEpoch[agentId]);
         }

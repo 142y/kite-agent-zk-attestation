@@ -14,3 +14,12 @@ requires an independently selected, audited verifier and matching circuit.
 These source changes do not upgrade an existing deployment or establish the
 provenance of addresses in the README. Existing deployments need a separately
 reviewed migration. No live-chain transaction is part of this proposal.
+
+## Epoch monotonicity
+
+Each `agentId` has its own latest epoch. `anchorAttestation` reverts with
+`StaleComputationEpoch` unless the submitted epoch is strictly greater than that
+agent's latest epoch, so replaying an anchored epoch or submitting a lower,
+previously unused one is rejected before the verifier is called and leaves
+state unchanged. Epoch sequences of different agents do not affect each other.
+These properties are covered by `test-contracts/verifier.evm.mjs`.
