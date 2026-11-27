@@ -34,6 +34,15 @@ test('verifier configuration and proof rejection on a private, in-process EVM', 
     });
     const mock = await deploy(artifact('MockGroth16Verifier.sol', 'MockGroth16Verifier'));
     const registry = await deploy(registryArtifact, [mock.address]);
+    await t.test('deployment logs the initial owner and verifier', async () => {
+      const events = await publicClient.getContractEvents({ address: registry.address, abi: registryArtifact.abi, fromBlock: 0n });
+      assert.deepEqual(events.map(e => e.eventName), ['OwnershipTransferred', 'VerifierUpdated']);
+      const [ownership, verifierUpdate] = events;
+      assert.equal(ownership.args.previousOwner, zeroAddress);
+      assert.equal(ownership.args.newOwner.toLowerCase(), owner.toLowerCase());
+      assert.equal(verifierUpdate.args.oldVerifier, zeroAddress);
+      assert.equal(verifierUpdate.args.newVerifier.toLowerCase(), mock.address.toLowerCase());
+    });
     await t.test('updates reject missing code and unauthorized accounts', async () => {
       for (const verifier of [zeroAddress, other]) {
         await assert.rejects(registry.simulate.setVerifier([verifier], { account: owner }));
