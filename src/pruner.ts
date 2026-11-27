@@ -42,7 +42,7 @@ function assertEntry(entry: EpochArchiveEntry): void {
   assertHexString(entry.agentId, 'agentId');
   assertHexString(entry.attestationDigest, 'attestationDigest');
   if (typeof entry.epoch !== 'bigint' || entry.epoch < 1n || entry.epoch >= 2n ** 256n) {
-    throw new RangeError('epoch must be a bigint between 1 and 2^256 - 1');
+    throw new RangeError('epoch must be a positive bigint between 1 and 2^256 - 1');
   }
 }
 
@@ -124,6 +124,16 @@ export class AttestationPrunerDaemon {
     assertMaxAgeMs(maxAgeMs, 'maxAgeMs');
     const now = Date.now();
     const thresholdEpoch = filter.retentionEpochThreshold;
+    if (thresholdEpoch !== undefined && (typeof thresholdEpoch !== 'bigint' || thresholdEpoch < 0n)) {
+      throw new RangeError('retentionEpochThreshold must be a non-negative bigint');
+    }
+    if (filter.targetAgentIds !== undefined) {
+      for (const id of filter.targetAgentIds) {
+        if (!isHex(id)) {
+          throw new Error('targetAgentIds entries must be hex strings');
+        }
+      }
+    }
     const targetAgents = filter.targetAgentIds
       ? new Set(filter.targetAgentIds.map(id => id.toLowerCase()))
       : undefined;
