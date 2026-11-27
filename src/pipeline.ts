@@ -35,6 +35,9 @@ export class BatchAttestationPipeline {
   private relay: KiteZKAttestationRelay;
 
   constructor(relay: KiteZKAttestationRelay) {
+    if (typeof relay?.verifyAttestationProof !== "function") {
+      throw new TypeError("relay must provide a verifyAttestationProof function");
+    }
     this.relay = relay;
   }
 
