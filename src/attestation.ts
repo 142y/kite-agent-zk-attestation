@@ -100,7 +100,11 @@ export class KiteZKAttestationRelay {
         attestationDigest: zeroHash,
         epoch: 0n,
         agentId: zeroHash,
-        rejectionReason: `Schema validation failed: ${parseResult.error.issues.map(i => i.message).join(', ')}`,
+        // Zod type errors such as "Required" do not say which field failed, so prefix the path.
+        rejectionReason: `Schema validation failed: ${parseResult.error.issues.map(({ path, message }) => {
+          const field = path.join('.') || 'proof';
+          return message.startsWith(`${field} `) ? message : `${field}: ${message}`;
+        }).join(', ')}`,
       };
     }
 
