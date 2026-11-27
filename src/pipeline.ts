@@ -26,6 +26,11 @@ export interface BatchAnchorSummary {
     epoch: bigint;
     reason: string;
   }>;
+  /**
+   * Maps each accepted agentId (lowercased) to the highest epoch accepted in this batch.
+   * Useful for callers that need to persist or display per-agent sequence progress.
+   */
+  perAgentLastAcceptedEpoch: Record<string, bigint>;
 }
 
 /**
@@ -35,10 +40,19 @@ export class BatchAttestationPipeline {
   private relay: KiteZKAttestationRelay;
 
   constructor(relay: KiteZKAttestationRelay) {
+    if (typeof relay?.verifyAttestationProof !== "function") {
+      throw new TypeError("relay must provide a verifyAttestationProof function");
+    }
     this.relay = relay;
   }
 
   public async processBatch(request: BatchAnchorRequest): Promise<BatchAnchorSummary> {
+    // Reject non-array input up front: iterating a string or Set would otherwise be
+    // reported as a batch of bogus per-character/per-item rejections.
+    if (!Array.isArray(request?.proofs)) {
+      throw new TypeError("request.proofs must be an array of attestation proofs");
+    }
+
     // 批次开始后策略固定，异步验证期间调用方修改请求不能改变本次处理规则。
     const { strictEpochOrdering, stopOnFirstRejection } = request;
     const summary: BatchAnchorSummary = {
@@ -47,12 +61,18 @@ export class BatchAttestationPipeline {
       rejectedCount: 0,
       anchoredDigests: [],
       rejections: [],
+      perAgentLastAcceptedEpoch: {},
     };
+
+    // Tracks the highest accepted epoch per agentId in this batch.
+    const acceptedEpochs = new Map<string, bigint>();
 
     // Tracks the highest epoch observed in this batch per agentId if strict ordering is active
     const batchSeenEpochs = new Map<string, bigint>();
 
-    for (const proof of request.proofs) {
+    // Iterate over a copy taken before the first await, so a caller that drains or refills
+    // its queue while proofs are being verified cannot change which proofs this batch covers.
+    for (const proof of [...request.proofs]) {
       summary.totalProcessed++;
 
       // Strict in-batch monotonicity check
@@ -77,13 +97,19 @@ export class BatchAttestationPipeline {
           }
           continue;
         }
+        batchSeenEpochs.set(proof.agentId.toLowerCase(), proof.computationEpoch);
       }
 
       const res = await this.relay.verifyAttestationProof(proof);
       if (res.valid) {
         summary.acceptedCount++;
         summary.anchoredDigests.push(res.attestationDigest);
-        batchSeenEpochs.set(proof.agentId.toLowerCase(), proof.computationEpoch);
+        const key = proof.agentId.toLowerCase();
+        batchSeenEpochs.set(key, proof.computationEpoch);
+        const previous = acceptedEpochs.get(key);
+        if (previous === undefined || proof.computationEpoch > previous) {
+          acceptedEpochs.set(key, proof.computationEpoch);
+        }
       } else {
         summary.rejectedCount++;
         summary.rejections.push({
@@ -96,6 +122,10 @@ export class BatchAttestationPipeline {
           break;
         }
       }
+    }
+
+    for (const [agentId, epoch] of acceptedEpochs) {
+      summary.perAgentLastAcceptedEpoch[agentId] = epoch;
     }
 
     return summary;
